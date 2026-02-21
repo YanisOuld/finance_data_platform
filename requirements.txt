@@ -1,0 +1,43 @@
+# Server
+fastapi
+uvicorn[standard]
+
+# DB
+sqlalchemy
+psycopg2-binary
+alembic
+
+# Data Processing
+pandas
+numpy
+pyarrow
+polars
+
+# http
+requests
+httpx
+
+# Shemas
+pydantic
+
+# Cache
+redis
+
+# Env
+python-dotenv
+
+# Tests
+pytest
+
+# lint
+black
+ruff
+
+# API key
+fredapi
+yfinance
+
+# AWS 
+boto3
+
+
