@@ -1,24 +1,37 @@
-from core.database import Base
+# src/db/models/prices_1d.py
+from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Optional
 
-from sqlalchemy.orm import Mapped, mapped_column, func
-from sqlalchemy import Integer, String, Date, Datetime, Numeric
+from sqlalchemy import Date, DateTime, Float, BigInteger, String, text
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.sql import func
 
-class Price_1d(Base):
-	__tablename__ = "prices_1d"
+from src.core.database import Base  # ton declarative base
 
-	id: Mapped[int] = mapped_column(Integer, primary_key=True)
-	ts: Mapped[date] = mapped_column(Date, nullable=False)
-	ticker: Mapped[str] = mapped_column(String, nullable=False)
-	source: Mapped[str] = mapped_column(String, nullable=True)
-	open: Mapped[float] = mapped_column(Numeric, nullable=False)
-	close: Mapped[float] = mapped_column(Numeric, nullable=False)
-	high: Mapped[float] = mapped_column(Numeric, nullable=False)
-	low: Mapped[float] = mapped_column(Numeric, nullable=False)
-	volume: Mapped[float] = mapped_column(Integer)
-	stock_splits: Mapped[float] = mapped_column(Numeric, default=0.0)
-	dividends: Mapped[float] = mapped_column(Numeric, default=0.0)
 
-	created_at: Mapped[datetime] = mapped_column(Datetime, server_default=func.now)
-	modified_at: Mapped[datetime] = mapped_column(Datetime, onupdate=func.now)
+class Price1D(Base):
+    __tablename__ = "prices_1d"
+
+    symbol: Mapped[str] = mapped_column(String, primary_key=True)
+    ts: Mapped[date] = mapped_column(Date, primary_key=True)
+
+    open: Mapped[Optional[float]] = mapped_column(Float)
+    high: Mapped[Optional[float]] = mapped_column(Float)
+    low: Mapped[Optional[float]] = mapped_column(Float)
+    close: Mapped[Optional[float]] = mapped_column(Float)
+
+    volume: Mapped[Optional[int]] = mapped_column(BigInteger)
+    dividends: Mapped[Optional[float]] = mapped_column(Float)
+    stock_split: Mapped[Optional[float]] = mapped_column(Float)
+    close_returns: Mapped[Optional[float]] = mapped_column(Float)
+
+    source: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'yahoo'"))
+    run_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )

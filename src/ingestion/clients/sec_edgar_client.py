@@ -93,7 +93,7 @@ def ingest_edgar_financial_to_bronze(
 	return f"s3://{res.bucket}/{res.key}"
 
 
-BUCKET_BRONZE_URL=os.getenv("BRONZE_BUCKET_ID")
+BUCKET_BRONZE_URL=os.getenv("BUCKET_ID")
 
 if __name__ == "__main__":
 	res = ingest_edgar_financial_to_bronze(

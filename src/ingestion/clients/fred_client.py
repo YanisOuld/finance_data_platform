@@ -69,7 +69,7 @@ def ingest_fred_to_bronze(bucket: str, macro: str, start: str, end: str):
 
 	return f"s3://{bucket}/{res.key}"
 
-URL_BRONZE = os.getenv("BRONZE_BUCKET_ID")
+URL_BRONZE = os.getenv("BUCKET_ID")
 
 if __name__ == "__main__":
 	res = ingest_fred_to_bronze(URL_BRONZE, macro="cpi", start="2025-01-01", end="2025-12-31")

@@ -9,34 +9,14 @@ services:
     networks:
       - app_network
 
-  postgres:
-    image: postgres:16-alpine
-    container_name: app_postgres
-    restart: always
-    environment:
-      POSTGRES_USER: app_user
-      POSTGRES_PASSWORD: app_password
-      POSTGRES_DB: app_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app_user"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - app_network
-
   backend:
-    build: ./backend
+    build: ./
     ports:
       - "8000:8000"
     volumes:
-      - ./backend:/app
+      - ./src:/app/src
     env_file:
-      - ./backend/.env
+      - .env
     environment:
       env: prod
     depends_on:

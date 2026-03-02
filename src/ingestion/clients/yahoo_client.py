@@ -103,7 +103,7 @@ def ingest_yahoo_info_to_bronze(bucket: str, symbol: str):
 
     return f"s3//{res.bucket}/{res.key}"
 
-URL_BRONZE = os.getenv("BRONZE_BUCKET_ID")
+URL_BRONZE = os.getenv("BUCKET_ID")
 
 if __name__ == "__main__":
     symbol = "SOFI"

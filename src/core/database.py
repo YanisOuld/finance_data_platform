@@ -11,6 +11,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+
 # Require DATABASE_URL - no default with credentials
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:

@@ -2,57 +2,19 @@
 Fetch the json
 
 '''
-import boto3
 import os
-import json
-import gzip
 
-from datetime import date
 from dotenv import load_dotenv
 from typing import List
 import polars as pl
 
+from .write_silver import store_to_s3, create_silver_key
+from .fetch_bronze import create_bronze_key, fetch_json_from_bronze
+
 load_dotenv()
 
 
-def _get_s3():
-	return boto3.client("s3")
-
-def _create_key(type: str, run_id: str, dt: str = None, symbol: str = None):
-	'''
-	'''
-	base =  f"bronze/yahoo/{type}"
-
-	if not dt and not symbol:
-		raise ValueError("We need at least a dt or a symbol for the key!")
-	
-	if dt:
-		base = f"{base}/dt={dt}"
-
-	if symbol:
-		symbol = symbol.upper()
-		base = f"{base}/symbol={symbol}"
-	
-	url = f"{base}/run_id={run_id}.json.gz"
-	print(url)
-	return url
-
-def fetch_json_from_bronze(bucket: str, key: str) -> dict:
-	'''
-	fetch from the s3 bucket
-	unzip if neeeded 
-	encode and becore a dict
-	'''
-	s3 = _get_s3()
-
-	obj = s3.get_object(Bucket=bucket, Key=key)
-	raw = obj["Body"].read()
-	if key.endswith("gz"):
-		raw = gzip.decompress(raw)
-
-	return json.loads(raw.decode("utf-8"))
-
-def normalize_info(info: dict ):
+def normalize_info(info: dict):
     res = { 
         "exchange": info["exchange"], 
         "quote_type": info["quoteType"],
@@ -92,29 +54,32 @@ def normalize_history(raw: dict) -> List[dict]:
 
 	return out
 
+def _convert_str_date_to_date(column: str):
+	col = pl.col(column).str.strptime(
+		pl.Datetime,
+		format="%Y-%m-%d %H:%M:%S%z"
+	).dt.convert_time_zone("UTC").cast(pl.Date)
+	return col
+
 def clean_bronze(raw: dict) -> pl.DataFrame:
 	df = pl.DataFrame(raw)
+	df = df.with_columns(
+		_convert_str_date_to_date("ts").alias("ts"),
+		pl.col("symbol").list.first().alias("symbol")
+	)
 
 	return df
 
-	...
 
-def store_to_local():
-	
-	...
+BUCKET_ID= os.getenv("BUCKET_ID")
 
-def store_to_s3():
-
-	...
-
-
-BRONZE_BUCKET_ID= os.getenv("BRONZE_BUCKET_ID")
 
 if __name__ == "__main__":
 	...
-	key =  _create_key(type="history", run_id="20260224180059Z", dt="2026-02-24")
-	res = fetch_json_from_bronze(BRONZE_BUCKET_ID, key)
+	key =  create_bronze_key(type="history", run_id="20260224180059Z", dt="2026-02-24")
+	res = fetch_json_from_bronze(BUCKET_ID, key)
 	table = normalize_history(res)
 	df = clean_bronze(table)
-	print(df)
-	
+	silver_key = create_silver_key(type="history", dt="2026-02-24")
+	store_to_s3(bucket=BUCKET_ID, df=df, s3_key=silver_key)
+	print(silver_key)

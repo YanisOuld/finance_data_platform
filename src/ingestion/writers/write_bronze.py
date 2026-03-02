@@ -60,12 +60,12 @@ def _normalize_partitions(partitions: Optional[Dict[str, Any]]) -> Dict[str, str
 	return out
 
 def make_bronze_key(
-		vendor: str, 
-		dataset: str,
-		fetched_at: datetime | None = None,
-		partitions: Optional[Dict[str, Any]] = None,
-		ext: str = "json.gz"
-	):
+    vendor: str, 
+    dataset: str,
+    fetched_at: datetime | None = None,
+    partitions: Optional[Dict[str, Any]] = None,
+    ext: str = "json.gz"
+):
 	
     vendor = vendor.strip().lower()
     dataset = dataset.strip().lower()
@@ -73,7 +73,6 @@ def make_bronze_key(
 
     dt = _dt_partition(fetched_at)
     run = _run_partition(now)
-
     parts = _normalize_partitions(partitions) 
     partition_path = "/".join([f"{k}={v}" for k, v in parts.items()]) 
 	

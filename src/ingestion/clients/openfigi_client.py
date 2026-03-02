@@ -28,7 +28,7 @@ On doit donner des specs pour avoir un résulat concluent:
 load_dotenv()
 
 API_KEY=os.getenv("OPENFIGI_API_KEY", "")
-BUCKET_BRONZE_URL=os.getenv("BRONZE_BUCKET_ID")
+BUCKET_BRONZE_URL=os.getenv("BUCKET_ID")
 
 HEADERS = {
   	"Content-Type" : "application/json",
