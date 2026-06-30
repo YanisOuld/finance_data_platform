@@ -110,7 +110,9 @@ def gold_load(silver_info: dict) -> dict:
     lazy_df = fetch_parquet_from_silver(bucket=silver_info["bucket"], key=silver_info["silver_key"])
     df = lazy_df.collect()
 
-    check_prices_1d(df)
+    report = check_prices_1d(df)
+    for warning in report.warnings:
+        print(f"[QUALITY WARNING] {warning}")
 
     df_feat = add_return(df, "close")
     gold_rows = write_gold_price1D(df_feat)
