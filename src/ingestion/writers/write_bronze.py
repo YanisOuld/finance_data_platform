@@ -155,23 +155,3 @@ def write_bronze_to_s3(
     )
 
     return BronzeWriteResult(bucket=bucket, key=key, fetched_at=fetched_at, record_count=record_count)
-
-
-def append_manifest_line_s3(
-    bucket: str,
-    manifest_key: str,
-    line_obj: dict[str, Any],
-    s3_client=None,
-) -> None:
-    """ """
-    if s3_client is None:
-        s3_client = get_s3_client()
-
-    body = _gzip_json_bytes(line_obj)
-    s3_client.put_object(
-        Bucket=bucket,
-        Key=manifest_key,
-        Body=body,
-        ContentType="application/json",
-        ContentEncoding="gzip",
-    )

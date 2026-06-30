@@ -2,8 +2,6 @@
 Any important information will be stored there
 """
 
-from enum import Enum
-
 # Used when a ticker has no ingestion_watermark row yet (first-ever backfill).
 DEFAULT_BACKFILL_START = "2015-01-01"
 
@@ -23,10 +21,3 @@ FRED_COLUMN_SERIES = {
     "usd/jpy": "DEXJPUS",
     "usd/gbp": "DEXUSUK",
 }
-
-BASE_URL_FIGI = "https://api.openfigi.com"
-
-
-class SecEdgarRequestType(Enum):
-    SUBMISSIONS = "submissions"
-    COMPANY_FACTS = "companyfacts"
