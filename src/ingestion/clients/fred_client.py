@@ -2,69 +2,58 @@ import os
 import requests
 
 from dotenv import load_dotenv
-from ingestion.writers.write_bronze import write_bronze_to_s3
-
+from src.core.constants import FRED_COLUMN_SERIES
+from src.ingestion.writers.write_bronze import write_bronze_to_s3
 
 load_dotenv()
 
-BASE_URL="https://api.stlouisfed.org/fred/series/observations"
+BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
 
 
-def _get_fred_instance():
-	api_access = os.getenv("FRED_API_KEY")
-	if not api_access:
-		raise ValueError("The API key was not available")
+def _get_fred_api_key() -> str:
+	api_key = os.getenv("FRED_API_KEY")
+	if not api_key:
+		raise ValueError("FRED_API_KEY env var is missing")
 
-	return api_access
-
-def _find_series(macro: str):
-	macro = macro.lower()
-	
-	table = {
-		"cpi": "CPIAUCSL",
-		"gdp": "GDP",
-		"unemployement_rate": "UNRATE",
-		"fed_funds": "FEDFUNDS",
-		"usd/eur": "DEXUSEU",
-		"usd/cad": "DEXCAUS",
-		"usd/jpy": "DEXJPUS",
-		"usd/gbp": "DEXUSUK"
-	}
-
-	return table.get(macro)
+	return api_key
 
 
-def fetch_series(macro: str, start: str, end: str):
-	url = f"https://api.stlouisfed.org/fred/series/observations"
+def _find_series(macro: str) -> str | None:
+	return FRED_COLUMN_SERIES.get(macro.lower())
 
+
+def fetch_series(macro: str, start: str, end: str) -> dict:
 	series_id = _find_series(macro)
 
 	if not series_id:
-		raise ValueError("There is a missing ")
+		raise ValueError(
+			f"Unknown macro series '{macro}'. Known series: {sorted(FRED_COLUMN_SERIES)}"
+		)
 
-	params= {
-		"series_id":series_id,
-		"api_key":_get_fred_instance(),
-		"file_type":"json",
+	params = {
+		"series_id": series_id,
+		"api_key": _get_fred_api_key(),
+		"file_type": "json",
 		"observation_start": start,
-		"observation_end": end 
+		"observation_end": end,
 	}
 
-	res = requests.get(url=url, params=params, timeout=30)
+	res = requests.get(url=BASE_URL, params=params, timeout=30)
 	res.raise_for_status()
 	return res.json()
 
 
-def ingest_fred_to_bronze(bucket: str, macro: str, start: str, end: str):
+def ingest_fred_to_bronze(bucket: str, macro: str, start: str, end: str) -> str:
+	macro = macro.lower()
 	data = fetch_series(macro=macro, start=start, end=end)
 	res = write_bronze_to_s3(
 		bucket=bucket,
 		vendor="fred",
-		dataset="macros", 
+		dataset="macros",
 		payload=data,
-		partitions={"Macro": macro},
+		partitions={"series": macro},
 		params={"start": start, "end": end},
-		schema_version=1 
+		schema_version=1,
 	)
 
 	return f"s3://{bucket}/{res.key}"

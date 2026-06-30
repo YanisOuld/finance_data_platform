@@ -22,7 +22,12 @@ from src.core.database import SessionLocal
 
 
 def write_gold_price1D(df: pl.DataFrame):
-	with SessionLocal() as session:
-		rows = df.to_dicts()
-		upsert_prices_1d(session, rows)
-		session.commit()
+    """Upsert a PA price_1d dataframe into the gold/Postgres table.
+
+    Returns the number of rows processed so callers can verify success.
+    """
+    with SessionLocal() as session:
+        rows = df.to_dicts()
+        upsert_prices_1d(session, rows)
+        session.commit()
+    return len(rows)

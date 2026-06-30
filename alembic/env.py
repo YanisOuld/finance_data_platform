@@ -17,8 +17,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-from src.core.database import Base  # <-- adapte le chemin si ta Base est ailleurs
-import src.data.models  # noqa: F401  <-- force l'import de tes models (tables)
+from src.core.database import Base 
+import src.data.models
 
 # Metadata used by Alembic autogenerate
 target_metadata = Base.metadata
@@ -37,7 +37,7 @@ def run_migrations_offline() -> None:
         url=get_url(),
         target_metadata=target_metadata,
         literal_binds=True,
-        compare_type=True,               # détecte les changements de type
+        compare_type=True,
         dialect_opts={"paramstyle": "named"},
     )
 

@@ -25,48 +25,61 @@ def normalize_info(info: dict):
 
 def normalize_history(raw: dict) -> List[dict]:
 	'''
+	Matches the bronze payload written by ingest_yahoo_history_to_bronze (schema_version=2):
+	envelope["payload"] = {"start": ..., "end": ..., "rows": [{ts, open, high, low, close, volume, symbol}], "errors": [...]}
 	'''
-	meta = raw["meta"]
-	params = meta["params"] if meta and "params" in meta else None
+	meta = raw.get("meta") or {}
+	payload = raw.get("payload") or {}
 
-	if not params:
-		raise ValueError("We are missing dates and symbols in the data ")
-	
-	payload = raw["payload"]
+	rows = payload.get("rows") or []
+	errors = payload.get("errors") or []
+	if errors:
+		print(f"[WARN] normalize_history: {len(errors)} symbol(s) had no bronze rows: {[e.get('symbol') for e in errors]}")
 
-
-	out = []
-	for stock in payload:
-		symbol = stock["symbol"],
-		data = stock["data"]
-		for daily in data:
-			out.append({
-				"symbol" : symbol,
-				"ts": daily["Date"],
-				"open": daily["Open"],
-				"high": daily["High"],
-				"low": daily["Low"],
-				"close": daily["Close"],
-				"volume": daily["Volume"],
-				"dividends": daily["Dividends"],
-				"stock_split": daily["Stock Splits"]
-			})
+	out: List[dict] = []
+	for r in rows:
+		ts = r.get("ts")
+		symbol = r.get("symbol")
+		if ts is None or symbol is None:
+			continue
+		# ts is a JSON-stringified pandas Timestamp (e.g. "2026-01-06 00:00:00-05:00").
+		# We only need calendar-day granularity for daily bars, so keep the date part only.
+		date_str = str(ts)[:10]
+		out.append({
+			"symbol": symbol,
+			"ts": date_str,
+			"open": r.get("open"),
+			"high": r.get("high"),
+			"low": r.get("low"),
+			"close": r.get("close"),
+			"volume": r.get("volume"),
+		})
 
 	return out
 
-def _convert_str_date_to_date(column: str):
-	col = pl.col(column).str.strptime(
-		pl.Datetime,
-		format="%Y-%m-%d %H:%M:%S%z"
-	).dt.convert_time_zone("UTC").cast(pl.Date)
-	return col
 
-def clean_bronze(raw: dict) -> pl.DataFrame:
-	df = pl.DataFrame(raw)
+def clean_bronze(rows: List[dict]) -> pl.DataFrame:
+	if not rows:
+		return pl.DataFrame(
+			schema={
+				"symbol": pl.Utf8,
+				"ts": pl.Date,
+				"open": pl.Float64,
+				"high": pl.Float64,
+				"low": pl.Float64,
+				"close": pl.Float64,
+				"volume": pl.Int64,
+			}
+		)
+
+	df = pl.DataFrame(rows)
 	df = df.with_columns(
-		_convert_str_date_to_date("ts").alias("ts"),
-		pl.col("symbol").list.first().alias("symbol")
+		pl.col("ts").str.strptime(pl.Date, format="%Y-%m-%d").alias("ts"),
+		pl.col("symbol").cast(pl.Utf8),
+		pl.col("volume").cast(pl.Int64),
 	)
+	df = df.unique(subset=["symbol", "ts"], keep="last")
+	df = df.sort(["symbol", "ts"])
 
 	return df
 

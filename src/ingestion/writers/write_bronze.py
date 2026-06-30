@@ -7,10 +7,9 @@ from __future__ import annotations
 
 import gzip
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 import io
 import json
-import os
 from typing import Any, Dict, Optional
 
 import boto3

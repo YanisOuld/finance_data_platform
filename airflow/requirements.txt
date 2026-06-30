@@ -1,0 +1,22 @@
+# DB drivers
+psycopg[binary]==3.1.18
+psycopg2-binary==2.9.9
+
+# Provider postgres (optionnel de pinner)
+apache-airflow-providers-postgres
+
+# Data libs (laisse Airflow constraints guider; mais OK de fixer si tu veux)
+pandas==2.1.4
+numpy>=1.26,<3
+pyarrow==16.1.0
+polars==0.20.16
+
+# Vendor + AWS
+yfinance==0.2.37
+requests==2.31.0
+boto3==1.34.69
+s3fs
+
+# Utils
+python-dotenv==1.0.1
+pendulum==3.0.0

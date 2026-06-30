@@ -2,10 +2,8 @@ import requests
 import os
 from dotenv import load_dotenv
 
-from core.constants import SecEdgarRequestType
-from ingestion.writers.write_bronze import write_bronze_to_s3
+from src.ingestion.writers.write_bronze import write_bronze_to_s3
 
-import boto3
 
 load_dotenv()
 
@@ -54,36 +52,57 @@ def _create_url(cik: str, request_type: str):
     )
 
 
-def _find_CIK(ticker: str):
+# Module-level cache: company_tickers.json is a single ~10MB file covering
+# every ticker. Re-downloading it on every _find_CIK() call (the previous
+# behavior) made each ingestion call pay that cost again for no reason.
+_CIK_BY_TICKER: dict[str, str] | None = None
+
+
+def _load_cik_table() -> dict[str, str]:
+	global _CIK_BY_TICKER
+	if _CIK_BY_TICKER is not None:
+		return _CIK_BY_TICKER
+
 	url = "https://www.sec.gov/files/company_tickers.json"
 	r = requests.get(url, headers=HEADERS, timeout=30)
 	r.raise_for_status()
-	json = r.json()
-	
-	ticker = ticker.upper()
-	for stock_dict in json.values():
-		if stock_dict["ticker"] == ticker:
-			return str(stock_dict["cik_str"]).zfill(10)
-	
-	raise ValueError(f"No CIk is associated to the ticker: {ticker} ")
+	data = r.json()
+
+	_CIK_BY_TICKER = {
+		stock["ticker"].upper(): str(stock["cik_str"]).zfill(10)
+		for stock in data.values()
+	}
+	return _CIK_BY_TICKER
+
+
+def _find_CIK(ticker: str):
+	table = _load_cik_table()
+	cik = table.get(ticker.upper())
+	if not cik:
+		raise ValueError(f"No CIK is associated to the ticker: {ticker}")
+	return cik
+
 
 def fetch_data(ticker: str, request_type: str):
 	cik = _find_CIK(ticker)
 	url = _create_url(cik, request_type)
 	return _get_json(url)
-	
+
 
 def ingest_edgar_financial_to_bronze(
 	bucket: str,
 	ticker: str,
-	start : str,
-	end: str
+	start: str,
+	end: str,
 ):
-	data = fetch_data(ticker, "submissions")
+	# companyfacts carries the actual XBRL financial facts (revenue, EPS, etc.);
+	# "submissions" (the previous default here) is just filing metadata and has
+	# no financial figures at all, despite the function name.
+	data = fetch_data(ticker, "companyfacts")
 	res = write_bronze_to_s3(
 		bucket=bucket,
 		vendor="sec_edgar",
-		dataset="financial",
+		dataset="companyfacts",
 		payload=data,
 		partitions={"symbol": ticker.upper()},
 		params={"start": start, "end": end},

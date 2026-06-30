@@ -3,9 +3,9 @@ import polars as pl
 from datetime import datetime , timezone
 
 
-def create_silver_key(type: str, dt: str):
+def create_silver_key(type: str, dt: str, vendor: str = "yahoo"):
 	run_id = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%SZ")
-	return f"silver/yahoo/{type}/dt={dt}/run_id={run_id}.parquet"
+	return f"silver/{vendor}/{type}/dt={dt}/run_id={run_id}.parquet"
 
 def store_to_s3(bucket: str, df: pl.DataFrame, s3_key: str):
 	s3_path = "s3://" +  bucket + "/" + s3_key
