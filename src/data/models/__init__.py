@@ -1,3 +1,4 @@
+from .ingestion_run import IngestionRun
 from .ingestion_watermark import IngestionWatermark
 from .macro_series import MacroSeries
 from .prices_1d import Price1D
@@ -8,4 +9,5 @@ __all__ = [
     "UniversalInstrument",
     "IngestionWatermark",
     "MacroSeries",
+    "IngestionRun",
 ]
