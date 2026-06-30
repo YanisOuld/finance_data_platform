@@ -17,6 +17,7 @@ import polars as pl
 from src.core.config import settings
 from src.core.constants import DEFAULT_BACKFILL_START
 from src.core.database import SessionLocal
+from src.data.crud.ingestion_run import finish_run, start_run
 from src.data.crud.ingestion_watermark import get_last_ts, upsert_watermark
 from src.ingestion.clients.yahoo_client import ingest_yahoo_history_to_bronze
 from src.transformers.gold.features.returns import add_return
@@ -82,13 +83,14 @@ def bronze_ingest(symbols: list[str] | str, start: str, end: str) -> dict:
 
 def silver_transform(bronze_info: dict) -> dict:
     raw = fetch_json_from_bronze(bucket=bronze_info["bucket"], key=bronze_info["bronze_key"])
+    failed_symbols = [e.get("symbol") for e in (raw.get("payload") or {}).get("errors") or []]
 
     records = normalize_history(raw)
     df_silver = clean_bronze(records)
 
     n_rows = df_silver.height
     if n_rows == 0:
-        return {**bronze_info, "silver_s3_path": None, "silver_rows": 0}
+        return {**bronze_info, "silver_s3_path": None, "silver_rows": 0, "failed_symbols": failed_symbols}
 
     # dt of the silver partition: the batch's start date (matches the daily DAG's ds)
     silver_key = create_silver_key(type="prices_1d", dt=bronze_info["start"])
@@ -100,6 +102,7 @@ def silver_transform(bronze_info: dict) -> dict:
         "silver_s3_path": silver_s3_path,
         "silver_key": key,
         "silver_rows": n_rows,
+        "failed_symbols": failed_symbols,
     }
 
 
@@ -134,22 +137,62 @@ def run_prices_pipeline(symbols: list[str] | str, start: str | None = None, end:
     if not symbols_list:
         raise ValueError("symbols must contain at least one ticker")
 
-    resolved_start = resolve_batch_start(symbols_list, start)
-    resolved_end = end or date.today().isoformat()
+    with SessionLocal() as session:
+        run_id = start_run(session, dataset="prices_1d", run_date=date.today())
 
-    bronze_info = bronze_ingest(symbols_list, start=resolved_start, end=resolved_end)
-    print(f"bronze data written to: {bronze_info['bronze_s3_path']}")
+    try:
+        resolved_start = resolve_batch_start(symbols_list, start)
+        resolved_end = end or date.today().isoformat()
 
-    silver_info = silver_transform(bronze_info)
-    if silver_info["silver_rows"] == 0:
-        print("SKIP: no rows after silver transform (market closed / Yahoo returned nothing).")
-        return 0
-    print(f"silver data written to: {silver_info['silver_s3_path']} (rows={silver_info['silver_rows']})")
+        bronze_info = bronze_ingest(symbols_list, start=resolved_start, end=resolved_end)
+        print(f"bronze data written to: {bronze_info['bronze_s3_path']}")
 
-    gold_info = gold_load(silver_info)
-    print(f"gold upsert completed, rows: {gold_info['gold_rows']}")
+        silver_info = silver_transform(bronze_info)
+        failed = silver_info.get("failed_symbols") or []
+        succeeded = len(symbols_list) - len(failed)
 
-    return int(gold_info["gold_rows"])
+        if silver_info["silver_rows"] == 0:
+            print("SKIP: no rows after silver transform (market closed / Yahoo returned nothing).")
+            with SessionLocal() as session:
+                finish_run(
+                    session,
+                    run_id,
+                    status="success",
+                    items_total=len(symbols_list),
+                    items_success=succeeded,
+                    items_failed=len(failed),
+                    notes="no rows after silver transform",
+                )
+            return 0
+        print(f"silver data written to: {silver_info['silver_s3_path']} (rows={silver_info['silver_rows']})")
+
+        gold_info = gold_load(silver_info)
+        print(f"gold upsert completed, rows: {gold_info['gold_rows']}")
+
+        with SessionLocal() as session:
+            finish_run(
+                session,
+                run_id,
+                status="success" if not failed else "partial",
+                items_total=len(symbols_list),
+                items_success=succeeded,
+                items_failed=len(failed),
+                notes=f"no bronze rows for: {failed}" if failed else None,
+            )
+
+        return int(gold_info["gold_rows"])
+
+    except Exception as e:
+        with SessionLocal() as session:
+            finish_run(
+                session,
+                run_id,
+                status="failed",
+                items_total=len(symbols_list),
+                items_failed=len(symbols_list),
+                notes=str(e)[:500],
+            )
+        raise
 
 
 if __name__ == "__main__":
