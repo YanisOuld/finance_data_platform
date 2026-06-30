@@ -7,11 +7,9 @@ source="fred", dataset=<series code> so each series tracks its own watermark
 
 from __future__ import annotations
 
-import os
 from datetime import date
 
-from dotenv import load_dotenv
-
+from src.core.config import settings
 from src.core.constants import DEFAULT_BACKFILL_START, FRED_COLUMN_SERIES
 from src.core.database import SessionLocal
 from src.data.crud.ingestion_watermark import get_last_ts, upsert_watermark
@@ -21,10 +19,6 @@ from src.transformers.gold.writers.write_gold_macro import write_gold_macro
 from src.transformers.silver.clean_fred import clean_bronze_fred, normalize_fred
 from src.transformers.silver.fetch_bronze import fetch_json_from_bronze
 from src.transformers.silver.write_silver import create_silver_key, store_to_s3
-
-load_dotenv()
-
-BUCKET_ID = os.getenv("BUCKET_ID", "")
 
 
 def _split_s3_uri(uri: str) -> tuple[str, str]:
@@ -53,14 +47,14 @@ def run_macro_pipeline(series: str, start: str | None = None, end: str | None = 
     series = series.lower()
     if series not in FRED_COLUMN_SERIES:
         raise ValueError(f"Unknown macro series '{series}'. Known: {sorted(FRED_COLUMN_SERIES)}")
-    if not BUCKET_ID:
-        raise RuntimeError("BUCKET_ID env var is missing")
 
     resolved_start = resolve_start(series, start)
     resolved_end = end or date.today().isoformat()
 
     # --- BRONZE --------------------------------------------------------
-    bronze_uri = ingest_fred_to_bronze(BUCKET_ID, macro=series, start=resolved_start, end=resolved_end)
+    bronze_uri = ingest_fred_to_bronze(
+        settings.bucket_id, macro=series, start=resolved_start, end=resolved_end
+    )
     print(f"bronze data written to: {bronze_uri}")
     bucket, bronze_key = _split_s3_uri(bronze_uri)
 

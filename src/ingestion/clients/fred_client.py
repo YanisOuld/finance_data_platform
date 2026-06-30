@@ -1,22 +1,17 @@
-import os
-
 import requests
-from dotenv import load_dotenv
 
+from src.core.config import settings
 from src.core.constants import FRED_COLUMN_SERIES
 from src.ingestion.writers.write_bronze import write_bronze_to_s3
-
-load_dotenv()
 
 BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
 
 
 def _get_fred_api_key() -> str:
-    api_key = os.getenv("FRED_API_KEY")
-    if not api_key:
+    if not settings.fred_api_key:
         raise ValueError("FRED_API_KEY env var is missing")
 
-    return api_key
+    return settings.fred_api_key
 
 
 def _find_series(macro: str) -> str | None:
@@ -58,8 +53,6 @@ def ingest_fred_to_bronze(bucket: str, macro: str, start: str, end: str) -> str:
     return f"s3://{bucket}/{res.key}"
 
 
-URL_BRONZE = os.getenv("BUCKET_ID")
-
 if __name__ == "__main__":
-    res = ingest_fred_to_bronze(URL_BRONZE, macro="cpi", start="2025-01-01", end="2025-12-31")
+    res = ingest_fred_to_bronze(settings.bucket_id, macro="cpi", start="2025-01-01", end="2025-12-31")
     print(res)

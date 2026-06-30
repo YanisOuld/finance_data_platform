@@ -1,7 +1,6 @@
 # src/ingestion/clients/yahoo_client.py
 from __future__ import annotations
 
-import os
 import random
 import time
 from datetime import UTC, datetime
@@ -10,11 +9,9 @@ from typing import Any
 import pendulum
 import requests
 import yfinance as yf
-from dotenv import load_dotenv
 
+from src.core.config import settings
 from src.ingestion.writers.write_bronze import write_bronze_to_s3
-
-load_dotenv()
 
 
 # -----------------------------
@@ -292,5 +289,4 @@ def ingest_yahoo_info_to_bronze(bucket: str, symbol: str) -> str:
 
 
 if __name__ == "__main__":
-    BUCKET = os.getenv("BUCKET_ID", "")
-    print(ingest_yahoo_history_to_bronze(BUCKET, ["AMZN"], start="2026-01-01", end="2026-01-02"))
+    print(ingest_yahoo_history_to_bronze(settings.bucket_id, ["AMZN"], start="2026-01-01", end="2026-01-02"))

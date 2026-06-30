@@ -10,12 +10,11 @@ re-implemented this logic inline and had drifted from this module.
 
 from __future__ import annotations
 
-import os
 from datetime import date, timedelta
 
 import polars as pl
-from dotenv import load_dotenv
 
+from src.core.config import settings
 from src.core.constants import DEFAULT_BACKFILL_START
 from src.core.database import SessionLocal
 from src.data.crud.ingestion_watermark import get_last_ts, upsert_watermark
@@ -27,10 +26,6 @@ from src.transformers.quality.checks import check_prices_1d
 from src.transformers.silver.clean_yf import clean_bronze, normalize_history
 from src.transformers.silver.fetch_bronze import fetch_json_from_bronze
 from src.transformers.silver.write_silver import create_silver_key, store_to_s3
-
-load_dotenv()
-
-BUCKET_ID = os.getenv("BUCKET_ID", "")
 
 
 def _split_s3_uri(uri: str) -> tuple[str, str]:
@@ -64,13 +59,10 @@ def resolve_batch_start(symbols: list[str], start: str | None) -> str:
 
 
 def bronze_ingest(symbols: list[str] | str, start: str, end: str) -> dict:
-    if not BUCKET_ID:
-        raise RuntimeError("BUCKET_ID env var is missing")
-
     symbols_list = [symbols] if isinstance(symbols, str) else list(symbols)
 
     bronze_uri = ingest_yahoo_history_to_bronze(
-        bucket=BUCKET_ID,
+        bucket=settings.bucket_id,
         symbols=symbols_list,
         start=start,
         end=end,

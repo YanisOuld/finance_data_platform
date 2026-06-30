@@ -1,17 +1,13 @@
 """
 Fetch the json
-
 """
 
-import os
-
 import polars as pl
-from dotenv import load_dotenv
+
+from src.core.config import settings
 
 from .fetch_bronze import create_bronze_key, fetch_json_from_bronze
 from .write_silver import create_silver_key, store_to_s3
-
-load_dotenv()
 
 
 def normalize_info(info: dict):
@@ -88,15 +84,11 @@ def clean_bronze(rows: list[dict]) -> pl.DataFrame:
     return df
 
 
-BUCKET_ID = os.getenv("BUCKET_ID")
-
-
 if __name__ == "__main__":
-    ...
     key = create_bronze_key(type="history", run_id="20260224180059Z", dt="2026-02-24")
-    res = fetch_json_from_bronze(BUCKET_ID, key)
+    res = fetch_json_from_bronze(settings.bucket_id, key)
     table = normalize_history(res)
     df = clean_bronze(table)
     silver_key = create_silver_key(type="history", dt="2026-02-24")
-    store_to_s3(bucket=BUCKET_ID, df=df, s3_key=silver_key)
+    store_to_s3(bucket=settings.bucket_id, df=df, s3_key=silver_key)
     print(silver_key)
