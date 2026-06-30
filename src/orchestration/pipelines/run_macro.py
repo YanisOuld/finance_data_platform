@@ -1,25 +1,3 @@
-from __future__ import annotations
-
-import os
-from datetime import date
-from typing import Optional
-
-from dotenv import load_dotenv
-
-load_dotenv()
-
-BUCKET_ID = os.getenv("BUCKET_ID", "")
-
-from src.core.constants import DEFAULT_BACKFILL_START, FRED_COLUMN_SERIES
-from src.core.database import SessionLocal
-from src.data.crud.ingestion_watermark import get_last_ts, upsert_watermark
-from src.ingestion.clients.fred_client import ingest_fred_to_bronze
-from src.transformers.silver.fetch_bronze import fetch_json_from_bronze
-from src.transformers.silver.clean_fred import normalize_fred, clean_bronze_fred
-from src.transformers.silver.write_silver import create_silver_key, store_to_s3
-from src.transformers.gold.writers.fetch_silver import fetch_parquet_from_silver
-from src.transformers.gold.writers.write_gold_macro import write_gold_macro
-
 """
 Bronze -> Silver -> Gold pipeline for a single FRED macro/FX series, mirroring
 src/orchestration/pipelines/run_prices.py. ingestion_watermark rows use
@@ -27,10 +5,31 @@ source="fred", dataset=<series code> so each series tracks its own watermark
 (series like "cpi" and "usd/cad" have very different observation cadences).
 """
 
+from __future__ import annotations
+
+import os
+from datetime import date
+
+from dotenv import load_dotenv
+
+from src.core.constants import DEFAULT_BACKFILL_START, FRED_COLUMN_SERIES
+from src.core.database import SessionLocal
+from src.data.crud.ingestion_watermark import get_last_ts, upsert_watermark
+from src.ingestion.clients.fred_client import ingest_fred_to_bronze
+from src.transformers.gold.writers.fetch_silver import fetch_parquet_from_silver
+from src.transformers.gold.writers.write_gold_macro import write_gold_macro
+from src.transformers.silver.clean_fred import clean_bronze_fred, normalize_fred
+from src.transformers.silver.fetch_bronze import fetch_json_from_bronze
+from src.transformers.silver.write_silver import create_silver_key, store_to_s3
+
+load_dotenv()
+
+BUCKET_ID = os.getenv("BUCKET_ID", "")
+
 
 def _split_s3_uri(uri: str) -> tuple[str, str]:
     assert uri.startswith("s3://"), f"unexpected uri (expected s3://...): {uri}"
-    bucket, key = uri[len("s3://"):].split("/", 1)
+    bucket, key = uri[len("s3://") :].split("/", 1)
     return bucket, key
 
 
@@ -38,7 +37,7 @@ WATERMARK_SOURCE = "fred"
 WATERMARK_DATASET = "macro"
 
 
-def resolve_start(series: str, start: Optional[str]) -> str:
+def resolve_start(series: str, start: str | None) -> str:
     if start:
         return start
 
@@ -50,7 +49,7 @@ def resolve_start(series: str, start: Optional[str]) -> str:
     return last_ts.isoformat()
 
 
-def run_macro_pipeline(series: str, start: Optional[str] = None, end: Optional[str] = None) -> int:
+def run_macro_pipeline(series: str, start: str | None = None, end: str | None = None) -> int:
     series = series.lower()
     if series not in FRED_COLUMN_SERIES:
         raise ValueError(f"Unknown macro series '{series}'. Known: {sorted(FRED_COLUMN_SERIES)}")

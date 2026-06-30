@@ -1,0 +1,20 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.3.4 # keep in sync with the ruff version pinned in requirements.txt
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # Intentionally NOT using trailing-whitespace / end-of-file-fixer /
+  # mixed-line-ending here: this repo is developed on Windows with CRLF line
+  # endings throughout (no .gitattributes normalizing this), and those hooks
+  # rewrite every file in the repo on first run, not just files you're
+  # committing. Re-evaluate once the repo has an explicit line-ending policy.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=2000]
+      - id: check-merge-conflict

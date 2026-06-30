@@ -1,16 +1,16 @@
-'''
+"""
 Convention: s3://<bucket>/bronze/{vendor}/{dataset}/dt=YYYY-MM-DD/{partitions}/run_id=YYYYMMDDTHHMMSSZ.json.gz
 
-'''
+"""
 
 from __future__ import annotations
 
 import gzip
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import io
 import json
-from typing import Any, Dict, Optional
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
 
 import boto3
 
@@ -22,88 +22,93 @@ class BronzeWriteResult:
     fetched_at: str
     record_count: int
 
+
 def _utc_now():
-	return datetime.now(timezone.utc)
+    return datetime.now(UTC)
+
 
 def _iso(dt: datetime):
-	if dt is None:
-		return None
-	
-	return dt.isoformat()
+    if dt is None:
+        return None
+
+    return dt.isoformat()
+
 
 def _dt_partition(dt: datetime):
-	if dt is None:
-		return None
-	
-	return dt.strftime("%Y-%m-%d")
+    if dt is None:
+        return None
+
+    return dt.strftime("%Y-%m-%d")
 
 
 def _run_partition(dt: datetime):
-	if dt is None:
-		return None
-	
-	return dt.strftime("%Y%m%d%H%M%SZ")
+    if dt is None:
+        return None
 
-def _normalize_partitions(partitions: Optional[Dict[str, Any]]) -> Dict[str, str]: 
-	if not partitions:
-		return {}
-	
-	out: Dict[str, str] = {}
-	for key, value in partitions.items():
-		if value is None:
-			continue
-		s = str(value).strip()
-		if not s:
-			continue
-		out[key] = s
-	return out
+    return dt.strftime("%Y%m%d%H%M%SZ")
+
+
+def _normalize_partitions(partitions: dict[str, Any] | None) -> dict[str, str]:
+    if not partitions:
+        return {}
+
+    out: dict[str, str] = {}
+    for key, value in partitions.items():
+        if value is None:
+            continue
+        s = str(value).strip()
+        if not s:
+            continue
+        out[key] = s
+    return out
+
 
 def make_bronze_key(
-    vendor: str, 
+    vendor: str,
     dataset: str,
     fetched_at: datetime | None = None,
-    partitions: Optional[Dict[str, Any]] = None,
-    ext: str = "json.gz"
+    partitions: dict[str, Any] | None = None,
+    ext: str = "json.gz",
 ):
-	
     vendor = vendor.strip().lower()
     dataset = dataset.strip().lower()
     now = _utc_now()
 
     dt = _dt_partition(fetched_at)
     run = _run_partition(now)
-    parts = _normalize_partitions(partitions) 
-    partition_path = "/".join([f"{k}={v}" for k, v in parts.items()]) 
-	
+    parts = _normalize_partitions(partitions)
+    partition_path = "/".join([f"{k}={v}" for k, v in parts.items()])
+
     base = f"bronze/{vendor}/{dataset}"
     if dt:
-    	base = f"{base}/dt={dt}"
-	
+        base = f"{base}/dt={dt}"
+
     if partition_path:
         base = f"{base}/{partition_path}"
-	
+
     return f"{base}/run_id={run}.{ext}"
 
+
 def _gzip_json_bytes(obj: Any):
-	raw = json.dumps(obj, ensure_ascii=False, default=str).encode("utf-8")
-	buf = io.BytesIO()
-	with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
-		gz.write(raw)
-	return buf.getvalue()
+    raw = json.dumps(obj, ensure_ascii=False, default=str).encode("utf-8")
+    buf = io.BytesIO()
+    with gzip.GzipFile(fileobj=buf, mode="wb") as gz:
+        gz.write(raw)
+    return buf.getvalue()
+
 
 def write_bronze_to_s3(
     bucket: str,
     vendor: str,
     dataset: str,
     payload: Any,
-    partitions: Optional[Dict[str, Any]] = None,
-	dt: datetime = None,
-    params: Optional[Dict[str, Any]] = None,
+    partitions: dict[str, Any] | None = None,
+    dt: datetime = None,
+    params: dict[str, Any] | None = None,
     schema_version: int = 1,
     s3_client=None,
 ) -> BronzeWriteResult:
-    """
-    """
+    """ """
     now = _utc_now()
     fetched_at = _iso(now)
 
@@ -155,12 +160,10 @@ def write_bronze_to_s3(
 def append_manifest_line_s3(
     bucket: str,
     manifest_key: str,
-    line_obj: Dict[str, Any],
+    line_obj: dict[str, Any],
     s3_client=None,
 ) -> None:
-    """
-    
-    """
+    """ """
     if s3_client is None:
         s3_client = boto3.client("s3")
 
@@ -172,4 +175,3 @@ def append_manifest_line_s3(
         ContentType="application/json",
         ContentEncoding="gzip",
     )
-		

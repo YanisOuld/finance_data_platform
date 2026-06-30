@@ -3,9 +3,10 @@ from __future__ import annotations
 import os
 from logging.config import fileConfig
 
-from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
+
+from alembic import context
 
 # Load env vars from .env (DATABASE_URL, etc.)
 load_dotenv()
@@ -17,8 +18,8 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-from src.core.database import Base 
 import src.data.models
+from src.core.database import Base
 
 # Metadata used by Alembic autogenerate
 target_metadata = Base.metadata
@@ -48,7 +49,7 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Run migrations in online mode."""
     section = config.get_section(config.config_ini_section) or {}
-    section["sqlalchemy.url"] = get_url()   # <-- IMPORTANT: utilise DATABASE_URL
+    section["sqlalchemy.url"] = get_url()  # <-- IMPORTANT: utilise DATABASE_URL
 
     connectable = engine_from_config(
         section,

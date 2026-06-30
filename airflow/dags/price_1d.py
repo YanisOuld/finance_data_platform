@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+
 import pendulum
 
 from airflow import DAG
@@ -26,28 +27,28 @@ with DAG(
     max_active_runs=1,
     tags=["yahoo", "prices", "medallion"],
     params={
-    "start_dt": Param(
-        default=None,
-        type=["null", "string"],
-        description="Override start_dt (YYYY-MM-DD). Leave empty for normal.",
-    ),
-    "end_dt": Param(
-        default=None,
-        type=["null", "string"],
-        description="Override end_dt (YYYY-MM-DD). Leave empty for normal.",
-    ),
-    "limit_tickers": Param(
-        default=0,
-        type="integer",
-        minimum=0,
-        description="Optional cap on number of tickers.",
-    ),
-    "symbols_override": Param(
-        default=None,
-        type=["null", "string"],
-        description="Comma-separated tickers to run instead of DB.",
-    ),
-},
+        "start_dt": Param(
+            default=None,
+            type=["null", "string"],
+            description="Override start_dt (YYYY-MM-DD). Leave empty for normal.",
+        ),
+        "end_dt": Param(
+            default=None,
+            type=["null", "string"],
+            description="Override end_dt (YYYY-MM-DD). Leave empty for normal.",
+        ),
+        "limit_tickers": Param(
+            default=0,
+            type="integer",
+            minimum=0,
+            description="Optional cap on number of tickers.",
+        ),
+        "symbols_override": Param(
+            default=None,
+            type=["null", "string"],
+            description="Comma-separated tickers to run instead of DB.",
+        ),
+    },
 ) as dag:
 
     @task
@@ -59,12 +60,12 @@ with DAG(
         # fallback: 1 day
         start = start_dt or ds
         end = end_dt or start
-        
+
         return {"start": str(start), "end": str(end)}
 
     @task
     def get_scheduled_tickers(**context) -> list:
-        symbols_override = (context["params"].get("symbols_override") or "")
+        symbols_override = context["params"].get("symbols_override") or ""
         limit_tickers = int(context["params"].get("limit_tickers") or 0)
 
         override = [s.strip().upper() for s in symbols_override.split(",") if s.strip()]
@@ -72,8 +73,10 @@ with DAG(
             return override[:limit_tickers] if limit_tickers > 0 else override
 
         import os
+
         from sqlalchemy import create_engine, select
         from sqlalchemy.orm import Session
+
         from src.data.models.universal_instruments import UniversalInstrument
 
         engine = create_engine(os.environ["GOLD_DATABASE_URL"])

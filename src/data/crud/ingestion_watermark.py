@@ -1,8 +1,9 @@
-import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 from datetime import date
+
+import sqlalchemy as sa
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
 
 from src.data.models.ingestion_watermark import IngestionWatermark
 
