@@ -3,7 +3,9 @@
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
+
 from src.data.models.prices_1d import Price1D
+
 
 def upsert_prices_1d(session: Session, rows: list[dict]) -> int:
     """

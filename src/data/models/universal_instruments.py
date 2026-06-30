@@ -1,9 +1,10 @@
-from src.core.database import Base
-
 from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
-from sqlalchemy import Boolean, DateTime, Integer, String
+
+from src.core.database import Base
 
 
 class UniversalInstrument(Base):

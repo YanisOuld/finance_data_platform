@@ -1,9 +1,10 @@
-from src.core.database import Base
+from datetime import date, datetime
 
-from datetime import datetime, date
+from sqlalchemy import Date, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
-from sqlalchemy import Date, DateTime, String
+
+from src.core.database import Base
 
 
 class IngestionWatermark(Base):

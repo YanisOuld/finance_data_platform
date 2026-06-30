@@ -1,23 +1,3 @@
-from __future__ import annotations
-
-from datetime import date, timedelta
-from typing import List, Optional, Union
-
-import polars as pl
-
-from src.core.config import settings
-from src.core.constants import DEFAULT_BACKFILL_START
-from src.core.database import SessionLocal
-from src.data.crud.ingestion_watermark import get_last_ts, upsert_watermark
-from src.ingestion.clients.yahoo_client import ingest_yahoo_history_to_bronze
-from src.transformers.silver.fetch_bronze import fetch_json_from_bronze
-from src.transformers.silver.clean_yf import normalize_history, clean_bronze
-from src.transformers.silver.write_silver import create_silver_key, store_to_s3
-from src.transformers.gold.writers.fetch_silver import fetch_parquet_from_silver
-from src.transformers.gold.features.returns import add_return
-from src.transformers.gold.writers.write_gold import write_gold_price1D
-from src.transformers.quality.checks import check_prices_1d
-
 """
 Single source of truth for the Yahoo prices_1d pipeline (Bronze -> Silver -> Gold).
 
@@ -28,14 +8,33 @@ runs. Both call paths now share the exact same code -- previously the DAG
 re-implemented this logic inline and had drifted from this module.
 """
 
+from __future__ import annotations
+
+from datetime import date, timedelta
+
+import polars as pl
+
+from src.core.config import settings
+from src.core.constants import DEFAULT_BACKFILL_START
+from src.core.database import SessionLocal
+from src.data.crud.ingestion_watermark import get_last_ts, upsert_watermark
+from src.ingestion.clients.yahoo_client import ingest_yahoo_history_to_bronze
+from src.transformers.gold.features.returns import add_return
+from src.transformers.gold.writers.fetch_silver import fetch_parquet_from_silver
+from src.transformers.gold.writers.write_gold import write_gold_price1D
+from src.transformers.quality.checks import check_prices_1d
+from src.transformers.silver.clean_yf import clean_bronze, normalize_history
+from src.transformers.silver.fetch_bronze import fetch_json_from_bronze
+from src.transformers.silver.write_silver import create_silver_key, store_to_s3
+
 
 def _split_s3_uri(uri: str) -> tuple[str, str]:
     assert uri.startswith("s3://"), f"unexpected uri (expected s3://...): {uri}"
-    bucket, key = uri[len("s3://"):].split("/", 1)
+    bucket, key = uri[len("s3://") :].split("/", 1)
     return bucket, key
 
 
-def resolve_batch_start(symbols: List[str], start: Optional[str]) -> str:
+def resolve_batch_start(symbols: list[str], start: str | None) -> str:
     """Resolve a single start date covering every symbol in the batch.
 
     If start is not given explicitly, use the earliest "day after last
@@ -48,7 +47,7 @@ def resolve_batch_start(symbols: List[str], start: Optional[str]) -> str:
         return start
 
     with SessionLocal() as session:
-        candidates: List[str] = []
+        candidates: list[str] = []
         for symbol in symbols:
             last_ts = get_last_ts(session, symbol)
             if last_ts is None:
@@ -59,7 +58,7 @@ def resolve_batch_start(symbols: List[str], start: Optional[str]) -> str:
     return min(candidates) if candidates else DEFAULT_BACKFILL_START
 
 
-def bronze_ingest(symbols: Union[List[str], str], start: str, end: str) -> dict:
+def bronze_ingest(symbols: list[str] | str, start: str, end: str) -> dict:
     symbols_list = [symbols] if isinstance(symbols, str) else list(symbols)
 
     bronze_uri = ingest_yahoo_history_to_bronze(
@@ -117,9 +116,7 @@ def gold_load(silver_info: dict) -> dict:
     gold_rows = write_gold_price1D(df_feat)
 
     # advance the watermark per symbol to the max ts we just upserted
-    max_ts_per_symbol = (
-        df_feat.group_by("symbol").agg(pl.col("ts").max().alias("max_ts")).to_dicts()
-    )
+    max_ts_per_symbol = df_feat.group_by("symbol").agg(pl.col("ts").max().alias("max_ts")).to_dicts()
     run_id = silver_info["bronze_s3_path"].rsplit("run_id=", 1)[-1].split(".")[0]
     with SessionLocal() as session:
         for row in max_ts_per_symbol:
@@ -129,7 +126,7 @@ def gold_load(silver_info: dict) -> dict:
     return {**silver_info, "gold_rows": gold_rows}
 
 
-def run_prices_pipeline(symbols: Union[List[str], str], start: Optional[str] = None, end: Optional[str] = None) -> int:
+def run_prices_pipeline(symbols: list[str] | str, start: str | None = None, end: str | None = None) -> int:
     symbols_list = [symbols] if isinstance(symbols, str) else list(symbols)
     symbols_list = [s.strip().upper() for s in symbols_list if s and s.strip()]
     if not symbols_list:

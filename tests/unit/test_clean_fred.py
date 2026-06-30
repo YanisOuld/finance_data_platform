@@ -1,4 +1,6 @@
-from src.transformers.silver.clean_fred import normalize_fred, clean_bronze_fred
+import pytest
+
+from src.transformers.silver.clean_fred import clean_bronze_fred, normalize_fred
 
 
 def _bronze_envelope(observations, series="cpi"):
@@ -27,11 +29,8 @@ def test_normalize_fred_filters_missing_observations():
 
 def test_normalize_fred_requires_series_in_meta():
     raw = {"meta": {"partitions": {}}, "payload": {"observations": []}}
-    try:
+    with pytest.raises(ValueError):
         normalize_fred(raw)
-        assert False, "expected ValueError"
-    except ValueError:
-        pass
 
 
 def test_clean_bronze_fred_types_and_sorts():

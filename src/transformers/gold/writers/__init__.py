@@ -1,6 +1,6 @@
-# TODO Put the core of gold there and we will think of a structure for this process 
+# TODO Put the core of gold there and we will think of a structure for this process
 
-'''
+"""
 serveur - client
 
 
@@ -19,9 +19,9 @@ Serveur
 
 API - Reception:
 
-Schmas: 
+Schmas:
 
--> Diriger vers un service 
+-> Diriger vers un service
 
 -> Appel CRUD (Base de donnée )
 
@@ -29,12 +29,12 @@ Schmas:
 
 api: url, Action , header, data
 
-data: ? 
--> 
+data: ?
+->
 
 get "student"
 
 
 
 
-'''
+"""

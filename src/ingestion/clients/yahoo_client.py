@@ -1,10 +1,10 @@
 # src/ingestion/clients/yahoo_client.py
 from __future__ import annotations
 
-import time
 import random
-from typing import Any, Dict, List, Optional, Union
-from datetime import datetime, timezone
+import time
+from datetime import UTC, datetime
+from typing import Any
 
 import pendulum
 import requests
@@ -28,7 +28,9 @@ def _debug_yahoo_chart(symbol: str) -> None:
         r = requests.get(url, timeout=20)
         ct = (r.headers.get("content-type") or "").lower()
         snippet = (r.text or "")[:140].replace("\n", " ")
-        print(f"[DEBUG] yahoo_chart symbol={symbol} status={r.status_code} content-type={ct} first140={snippet}")
+        print(
+            f"[DEBUG] yahoo_chart symbol={symbol} status={r.status_code} content-type={ct} first140={snippet}"
+        )
     except Exception as e:
         print(f"[DEBUG] yahoo_chart failed symbol={symbol} err={type(e).__name__}: {e}")
 
@@ -37,13 +39,13 @@ def _debug_yahoo_chart(symbol: str) -> None:
 # Recommended price fetcher
 # -----------------------------
 def fetch_prices_1d_safe(
-    symbols: Union[List[str], str],
+    symbols: list[str] | str,
     start: str,
     end: str,
     *,
     max_retries: int = 6,
     debug_on_empty: bool = True,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Fetch daily OHLCV prices using yf.download (more stable than Ticker().history()).
 
@@ -73,7 +75,7 @@ def fetch_prices_1d_safe(
     start_p = pendulum.parse(start).to_date_string()
     end_excl = pendulum.parse(end).add(days=1).to_date_string()
 
-    last_err: Optional[Exception] = None
+    last_err: Exception | None = None
 
     for attempt in range(max_retries):
         try:
@@ -84,18 +86,20 @@ def fetch_prices_1d_safe(
                 interval="1d",
                 auto_adjust=False,
                 group_by="ticker",
-                threads=False,   # IMPORTANT: less aggressive
+                threads=False,  # IMPORTANT: less aggressive
                 progress=False,
             )
 
             if df is None or df.empty:
                 if debug_on_empty:
-                    print(f"[WARN] yf.download returned empty. symbols={syms} start={start_p} end_excl={end_excl}")
+                    print(
+                        f"[WARN] yf.download returned empty. symbols={syms} start={start_p} end_excl={end_excl}"
+                    )
                     # Debug 1 symbol only to keep noise down
                     _debug_yahoo_chart(syms[0])
                 return []
 
-            rows: List[Dict[str, Any]] = []
+            rows: list[dict[str, Any]] = []
 
             # MultiIndex columns for multiple tickers: (TICKER, Field)
             is_multi = hasattr(df.columns, "levels") and len(getattr(df.columns, "levels", [])) == 2
@@ -151,7 +155,7 @@ def fetch_prices_1d_safe(
 
         except Exception as e:
             last_err = e
-            sleep_s = min(60, (2 ** attempt) + random.random())
+            sleep_s = min(60, (2**attempt) + random.random())
             print(f"[WARN] yf.download failed attempt={attempt+1}/{max_retries} err={e} sleep={sleep_s:.2f}s")
             time.sleep(sleep_s)
 
@@ -161,13 +165,13 @@ def fetch_prices_1d_safe(
 # -----------------------------
 # Optional: info fetcher (fragile)
 # -----------------------------
-def fetch_info(symbol: str, *, max_retries: int = 5) -> Dict[str, Any]:
+def fetch_info(symbol: str, *, max_retries: int = 5) -> dict[str, Any]:
     """
     Fetch ticker.info (more fragile than prices). Includes retries.
     Avoid using this in the daily path if you want maximum reliability.
     """
     symbol = symbol.strip().upper()
-    last_err: Optional[Exception] = None
+    last_err: Exception | None = None
 
     for attempt in range(max_retries):
         try:
@@ -180,8 +184,10 @@ def fetch_info(symbol: str, *, max_retries: int = 5) -> Dict[str, Any]:
             return info
         except Exception as e:
             last_err = e
-            sleep_s = min(60, (2 ** attempt) + random.random())
-            print(f"[WARN] info failed symbol={symbol} attempt={attempt+1}/{max_retries} err={e} sleep={sleep_s:.2f}s")
+            sleep_s = min(60, (2**attempt) + random.random())
+            print(
+                f"[WARN] info failed symbol={symbol} attempt={attempt+1}/{max_retries} err={e} sleep={sleep_s:.2f}s"
+            )
             time.sleep(sleep_s)
 
     raise RuntimeError(f"Failed to fetch ticker info for {symbol}: {last_err}")
@@ -192,7 +198,7 @@ def fetch_info(symbol: str, *, max_retries: int = 5) -> Dict[str, Any]:
 # -----------------------------
 def ingest_yahoo_history_to_bronze(
     bucket: str,
-    symbols: Union[List[str], str],
+    symbols: list[str] | str,
     start: str,
     end: str,
 ) -> str:
@@ -226,16 +232,16 @@ def ingest_yahoo_history_to_bronze(
         raise ValueError("symbols must contain at least one ticker")
 
     # fetch prices (batch)
-    rows: List[Dict[str, Any]] = fetch_prices_1d_safe(syms, start=start, end=end)
+    rows: list[dict[str, Any]] = fetch_prices_1d_safe(syms, start=start, end=end)
 
     # We can detect missing tickers by checking which symbols appear in rows
     seen = {r.get("symbol") for r in rows if isinstance(r, dict)}
-    errors: List[Dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
     for sym in syms:
         if sym not in seen:
             errors.append({"symbol": sym, "error": "no_rows_returned"})
 
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "start": start,
         "end": end,
         "rows": rows,
@@ -246,7 +252,7 @@ def ingest_yahoo_history_to_bronze(
         bucket=bucket,
         vendor="yahoo",
         dataset="history",  # keep name if you want, but it's really prices_1d
-        dt=datetime.now(timezone.utc),
+        dt=datetime.now(UTC),
         payload=payload,
         partitions=None,
         params={"start": start, "end": end, "symbols": ",".join(syms)},
@@ -272,7 +278,7 @@ def ingest_yahoo_info_to_bronze(bucket: str, symbol: str) -> str:
         bucket=bucket,
         vendor="yahoo",
         dataset="info",
-        dt=datetime.now(timezone.utc),
+        dt=datetime.now(UTC),
         payload=info,
         partitions={"symbol": symbol},
         params={"symbol": symbol},

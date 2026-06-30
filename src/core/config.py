@@ -70,7 +70,7 @@ class Settings(BaseSettings):
         return v.strip()
 
     @model_validator(mode="after")
-    def _export_aws_env(self) -> "Settings":
+    def _export_aws_env(self) -> Settings:
         """
         boto3 and polars's S3 reader both read AWS credentials straight from
         the *process* environment (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY /
