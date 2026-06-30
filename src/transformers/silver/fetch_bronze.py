@@ -1,10 +1,11 @@
-import boto3
 import json
 import gzip
 
+from src.core.bucket_utils import get_s3_client
+
 
 def _get_s3():
-	return boto3.client("s3")
+	return get_s3_client()
 
 def create_bronze_key(type: str, run_id: str, dt: str = None, symbol: str = None):
 	'''

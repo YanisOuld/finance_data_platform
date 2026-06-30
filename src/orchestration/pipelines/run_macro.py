@@ -1,15 +1,9 @@
 from __future__ import annotations
 
-import os
 from datetime import date
 from typing import Optional
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
-BUCKET_ID = os.getenv("BUCKET_ID", "")
-
+from src.core.config import settings
 from src.core.constants import DEFAULT_BACKFILL_START, FRED_COLUMN_SERIES
 from src.core.database import SessionLocal
 from src.data.crud.ingestion_watermark import get_last_ts, upsert_watermark
@@ -54,14 +48,12 @@ def run_macro_pipeline(series: str, start: Optional[str] = None, end: Optional[s
     series = series.lower()
     if series not in FRED_COLUMN_SERIES:
         raise ValueError(f"Unknown macro series '{series}'. Known: {sorted(FRED_COLUMN_SERIES)}")
-    if not BUCKET_ID:
-        raise RuntimeError("BUCKET_ID env var is missing")
 
     resolved_start = resolve_start(series, start)
     resolved_end = end or date.today().isoformat()
 
     # --- BRONZE --------------------------------------------------------
-    bronze_uri = ingest_fred_to_bronze(BUCKET_ID, macro=series, start=resolved_start, end=resolved_end)
+    bronze_uri = ingest_fred_to_bronze(settings.bucket_id, macro=series, start=resolved_start, end=resolved_end)
     print(f"bronze data written to: {bronze_uri}")
     bucket, bronze_key = _split_s3_uri(bronze_uri)
 

@@ -1,7 +1,6 @@
-import os
 import requests
-from dotenv import load_dotenv
 
+from src.core.config import settings
 from src.ingestion.writers.write_bronze import write_bronze_to_s3
 
 
@@ -21,14 +20,9 @@ silver step.
 '''
 
 
-load_dotenv()
-
-API_KEY = os.getenv("OPENFIGI_API_KEY", "")
-BUCKET_BRONZE_URL = os.getenv("BUCKET_ID")
-
 HEADERS = {
 	"Content-Type": "application/json",
-	"X-OPENFIGI-APIKEY": API_KEY,
+	"X-OPENFIGI-APIKEY": settings.openfigi_api_key or "",
 }
 
 BASE_URL = "https://api.openfigi.com/v3/mapping"
@@ -71,5 +65,5 @@ def ingest_openfigi_financial_to_bronze(
 
 
 if __name__ == "__main__":
-	res = ingest_openfigi_financial_to_bronze(BUCKET_BRONZE_URL, symbol="AAPL")
+	res = ingest_openfigi_financial_to_bronze(settings.bucket_id, symbol="AAPL")
 	print(res)

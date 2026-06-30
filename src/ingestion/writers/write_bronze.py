@@ -12,7 +12,7 @@ import io
 import json
 from typing import Any, Dict, Optional
 
-import boto3
+from src.core.bucket_utils import get_s3_client
 
 
 @dataclass(frozen=True)
@@ -139,7 +139,7 @@ def write_bronze_to_s3(
     body = _gzip_json_bytes(envelope)
 
     if s3_client is None:
-        s3_client = boto3.client("s3")
+        s3_client = get_s3_client()
 
     s3_client.put_object(
         Bucket=bucket,
@@ -162,7 +162,7 @@ def append_manifest_line_s3(
     
     """
     if s3_client is None:
-        s3_client = boto3.client("s3")
+        s3_client = get_s3_client()
 
     body = _gzip_json_bytes(line_obj)
     s3_client.put_object(

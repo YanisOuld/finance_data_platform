@@ -71,18 +71,11 @@ with DAG(
         if override:
             return override[:limit_tickers] if limit_tickers > 0 else override
 
-        import os
-        from sqlalchemy import create_engine, select
-        from sqlalchemy.orm import Session
-        from src.data.models.universal_instruments import UniversalInstrument
+        from src.core.database import SessionLocal
+        from src.data.crud.universal_instruments import get_scheduled_universe
 
-        engine = create_engine(os.environ["GOLD_DATABASE_URL"])
-        with Session(engine) as session:
-            stmt = select(UniversalInstrument.ticker).where(
-                UniversalInstrument.is_active == True,
-                UniversalInstrument.is_scheduled == True,
-            )
-            tickers = list(session.execute(stmt).scalars().all())
+        with SessionLocal() as session:
+            tickers = get_scheduled_universe(session)
 
         if limit_tickers > 0:
             tickers = tickers[:limit_tickers]

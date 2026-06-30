@@ -2,15 +2,10 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from typing import List, Optional, Union
-import os
 
 import polars as pl
-from dotenv import load_dotenv
 
-load_dotenv()
-
-BUCKET_ID = os.getenv("BUCKET_ID", "")
-
+from src.core.config import settings
 from src.core.constants import DEFAULT_BACKFILL_START
 from src.core.database import SessionLocal
 from src.data.crud.ingestion_watermark import get_last_ts, upsert_watermark
@@ -65,13 +60,10 @@ def resolve_batch_start(symbols: List[str], start: Optional[str]) -> str:
 
 
 def bronze_ingest(symbols: Union[List[str], str], start: str, end: str) -> dict:
-    if not BUCKET_ID:
-        raise RuntimeError("BUCKET_ID env var is missing")
-
     symbols_list = [symbols] if isinstance(symbols, str) else list(symbols)
 
     bronze_uri = ingest_yahoo_history_to_bronze(
-        bucket=BUCKET_ID,
+        bucket=settings.bucket_id,
         symbols=symbols_list,
         start=start,
         end=end,

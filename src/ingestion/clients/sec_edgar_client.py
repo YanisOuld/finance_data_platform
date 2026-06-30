@@ -1,11 +1,7 @@
 import requests
-import os
-from dotenv import load_dotenv
 
+from src.core.config import settings
 from src.ingestion.writers.write_bronze import write_bronze_to_s3
-
-
-load_dotenv()
 
 '''
 Theory:
@@ -112,11 +108,9 @@ def ingest_edgar_financial_to_bronze(
 	return f"s3://{res.bucket}/{res.key}"
 
 
-BUCKET_BRONZE_URL=os.getenv("BUCKET_ID")
-
 if __name__ == "__main__":
 	res = ingest_edgar_financial_to_bronze(
-		bucket=BUCKET_BRONZE_URL,
+		bucket=settings.bucket_id,
 		ticker="SOFI",
 		start="2026-02-01",
 		end="2026-02-15"
