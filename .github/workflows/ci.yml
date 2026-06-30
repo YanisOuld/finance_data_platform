@@ -42,9 +42,11 @@ jobs:
 
       - name: Run unit tests
         # Unit tests are pure-function tests (no S3/Postgres/network access),
-        # so no real credentials are needed here -- DATABASE_URL only has to
-        # be *set* because src/core/database.py fails fast at import time if
-        # it's missing, not because anything actually connects.
+        # so no real credentials are needed here -- DATABASE_URL/BUCKET_ID only
+        # have to be *set* because src/core/config.py (Settings) fails fast at
+        # import time if a required field is missing, not because anything
+        # actually connects to Postgres or S3.
         env:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+          BUCKET_ID: ci-test-bucket
         run: pytest tests/unit -v
