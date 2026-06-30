@@ -1,7 +1,7 @@
 import polars as pl
 
-from src.data.crud.macro_series import upsert_macro_series
 from src.core.database import SessionLocal
+from src.data.crud.macro_series import upsert_macro_series
 
 
 def write_gold_macro(df: pl.DataFrame) -> int:

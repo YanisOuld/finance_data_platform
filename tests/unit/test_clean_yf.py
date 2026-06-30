@@ -1,9 +1,13 @@
-from src.transformers.silver.clean_yf import normalize_history, clean_bronze
+from src.transformers.silver.clean_yf import clean_bronze, normalize_history
 
 
 def _bronze_envelope(rows, errors=None):
     return {
-        "meta": {"source": "yahoo", "dataset": "history", "params": {"start": "2026-01-01", "end": "2026-01-02"}},
+        "meta": {
+            "source": "yahoo",
+            "dataset": "history",
+            "params": {"start": "2026-01-01", "end": "2026-01-02"},
+        },
         "payload": {"start": "2026-01-01", "end": "2026-01-02", "rows": rows, "errors": errors or []},
     }
 

@@ -1,7 +1,7 @@
 import polars as pl
 import pytest
 
-from src.transformers.quality.checks import check_prices_1d, DataQualityError
+from src.transformers.quality.checks import DataQualityError, check_prices_1d
 
 
 def _valid_df(**overrides):
@@ -26,7 +26,15 @@ def test_check_prices_1d_passes_on_clean_data():
 
 def test_check_prices_1d_rejects_empty_frame():
     empty = pl.DataFrame(
-        schema={"symbol": pl.Utf8, "ts": pl.Utf8, "open": pl.Float64, "high": pl.Float64, "low": pl.Float64, "close": pl.Float64, "volume": pl.Int64}
+        schema={
+            "symbol": pl.Utf8,
+            "ts": pl.Utf8,
+            "open": pl.Float64,
+            "high": pl.Float64,
+            "low": pl.Float64,
+            "close": pl.Float64,
+            "volume": pl.Int64,
+        }
     )
     with pytest.raises(DataQualityError):
         check_prices_1d(empty)

@@ -6,6 +6,7 @@ sane value ranges) rather than a full validation framework -- the goal is
 to stop a corrupted/empty batch from silently overwriting good data in the
 serving layer, not to build a generic rules engine.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+
 import pendulum
 
 from airflow import DAG
 from airflow.decorators import task
 from airflow.models.param import Param
-
 from src.core.constants import FRED_COLUMN_SERIES
 
 TZ = pendulum.timezone("America/Montreal")

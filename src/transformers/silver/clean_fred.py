@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from typing import List
-
 import polars as pl
 
 
-def normalize_fred(raw: dict) -> List[dict]:
+def normalize_fred(raw: dict) -> list[dict]:
     """Normalize a FRED bronze envelope into flat {series, ts, value} rows.
 
     raw["payload"] is the raw FRED /series/observations response:
@@ -21,7 +19,7 @@ def normalize_fred(raw: dict) -> List[dict]:
     payload = raw.get("payload") or {}
     observations = payload.get("observations") or []
 
-    out: List[dict] = []
+    out: list[dict] = []
     for obs in observations:
         raw_value = obs.get("value")
         date_str = obs.get("date")
@@ -37,7 +35,7 @@ def normalize_fred(raw: dict) -> List[dict]:
     return out
 
 
-def clean_bronze_fred(rows: List[dict]) -> pl.DataFrame:
+def clean_bronze_fred(rows: list[dict]) -> pl.DataFrame:
     if not rows:
         return pl.DataFrame(schema={"series": pl.Utf8, "ts": pl.Date, "value": pl.Float64})
 
