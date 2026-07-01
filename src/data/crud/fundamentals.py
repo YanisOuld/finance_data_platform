@@ -1,4 +1,5 @@
 import sqlalchemy as sa
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -40,3 +41,13 @@ def upsert_fundamentals(session: Session, rows: list[dict]) -> int:
 
     result = session.execute(stmt)
     return result.rowcount or 0
+
+
+def get_fundamentals(
+    session: Session, ticker: str, *, concept: str | None = None, limit: int = 500
+) -> list[Fundamental]:
+    stmt = select(Fundamental).where(Fundamental.ticker == ticker.upper())
+    if concept is not None:
+        stmt = stmt.where(Fundamental.concept == concept)
+    stmt = stmt.order_by(Fundamental.period_end.desc()).limit(limit)
+    return list(session.execute(stmt).scalars().all())

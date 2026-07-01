@@ -54,6 +54,49 @@ def fetch_ticker_info(bucket: str, ticker: str) -> dict:
     return info
 
 
+def validate_and_upsert_ticker(ticker: str, *, is_scheduled: bool = True) -> dict:
+    """Fast path (a couple seconds, one Yahoo API call): fetch + validate
+    Yahoo `.info` and upsert into universal_instruments. Does NOT touch price
+    history. Split out of register_ticker() so the API layer can give
+    synchronous feedback (invalid ticker -> 4xx) before handing the slow part
+    (backfill_prices(), which can take minutes for years of history) to a
+    background task.
+    """
+    ticker = ticker.strip().upper()
+    if not ticker:
+        raise ValueError("ticker is required")
+
+    info = fetch_ticker_info(settings.bucket_id, ticker)
+    try:
+        meta = normalize_info(info)
+    except KeyError as e:
+        raise ValueError(f"'{ticker}' is missing required metadata field {e} -- refusing to register") from e
+
+    name = info.get("shortName") or info.get("longName") or ticker
+
+    with SessionLocal() as session:
+        instrument = get_or_create_instrument(
+            session,
+            ticker,
+            name=name,
+            exchange=meta["exchange"],
+            currency=meta["currency"],
+            timezone=meta["timezone"],
+            is_active=True,
+            is_scheduled=is_scheduled,
+        )
+        return {
+            "id": instrument.id,
+            "ticker": instrument.ticker,
+            "name": instrument.name,
+            "exchange": instrument.exchange,
+            "currency": instrument.currency,
+            "timezone": instrument.timezone,
+            "is_active": instrument.is_active,
+            "is_scheduled": instrument.is_scheduled,
+        }
+
+
 def register_ticker(
     ticker: str,
     *,
@@ -69,29 +112,10 @@ def register_ticker(
         tracking_run_id = start_run(session, dataset="register_ticker", run_date=date.today())
 
     try:
-        info = fetch_ticker_info(settings.bucket_id, ticker)
-        try:
-            meta = normalize_info(info)
-        except KeyError as e:
-            raise ValueError(
-                f"'{ticker}' is missing required metadata field {e} -- refusing to register"
-            ) from e
-
-        name = info.get("shortName") or info.get("longName") or ticker
-
-        with SessionLocal() as session:
-            instrument = get_or_create_instrument(
-                session,
-                ticker,
-                name=name,
-                exchange=meta["exchange"],
-                currency=meta["currency"],
-                timezone=meta["timezone"],
-                is_active=True,
-                is_scheduled=is_scheduled,
-            )
-            instrument_id = instrument.id
-        logger.info("registered instrument id=%s ticker=%s name=%s", instrument_id, ticker, name)
+        instrument = validate_and_upsert_ticker(ticker, is_scheduled=is_scheduled)
+        logger.info(
+            "registered instrument id=%s ticker=%s name=%s", instrument["id"], ticker, instrument["name"]
+        )
 
         backfill_rows = backfill_prices([ticker], start=backfill_start, end=backfill_end)
         logger.info("initial backfill completed, rows: %s", backfill_rows)
@@ -99,13 +123,7 @@ def register_ticker(
         with SessionLocal() as session:
             finish_run(session, tracking_run_id, status="success", items_total=1, items_success=1)
 
-        return {
-            "ticker": ticker,
-            "instrument_id": instrument_id,
-            "name": name,
-            "is_scheduled": is_scheduled,
-            "backfill_rows": backfill_rows,
-        }
+        return {**instrument, "backfill_rows": backfill_rows}
 
     except Exception as e:
         with SessionLocal() as session:

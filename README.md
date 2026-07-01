@@ -1,278 +1,63 @@
 # Finance Data Platform
 
-## Overview
-
-This project implements a modern financial data infrastructure built around a clear separation between:
-
-- Data Platform (batch processing layer)
-- Application Service (serving layer)
-- Client (frontend user interface)
-
-The system is designed to be scalable, cost-efficient, and production-ready while remaining simple enough for iterative development.
-
-The architecture follows a Bronze, Silver, Gold medallion model and uses AWS as the infrastructure backbone.
-
----
-
-# System Architecture
-
-## High-Level Architecture
-
-```mermaid
-flowchart TB
-
-subgraph ExternalSources
-    YF[Yahoo Finance]
-    SEC[SEC EDGAR]
-    FX[FX API]
-    MAP[OpenFIGI]
-end
-
-subgraph DataPlatform
-    AF[Airflow Scheduler]
-    ING[Ingestion Service]
-    TR[Transformation Service]
-    LOAD[Gold Loader]
-end
-
-subgraph Storage
-    S3[(AWS S3)]
-    PG[(Postgres RDS)]
-end
-
-subgraph Application
-    API[App Backend API]
-end
-
-subgraph Client
-    UI[Frontend Client]
-end
-
-AF --> ING
-ING --> S3
-TR --> S3
-LOAD --> PG
-
-S3 --> TR
-S3 --> LOAD
-
-PG --> API
-API --> UI
-
-YF --> ING
-SEC --> ING
-FX --> ING
-MAP --> ING
-````
-
----
-
-# Architecture Layers
-
-## 1. Data Platform
-
-The Data Platform is responsible for:
-
-* Fetching financial data from external APIs
-* Storing raw data (Bronze layer)
-* Cleaning and normalizing datasets (Silver layer)
-* Computing financial metrics (Gold layer)
-* Loading Gold datasets into Postgres
-
-This layer runs in batch mode and is orchestrated by Airflow.
-
-It does not serve end users directly.
-
-### Technologies Used
-
-* Python
-* Airflow
-* AWS S3
-* Pandas
-* PyArrow
-* Boto3
-* SQLAlchemy
-* Postgres
-
----
-
-## 2. Application Service
-
-The Application Service is responsible for:
-
-* Authentication
-* Portfolio management
-* Watchlists
-* Financial dashboards
-* API endpoints for the client
-
-The application only reads data from Postgres.
-
-It never calls external financial APIs directly.
-
-### Technologies Used
-
-* FastAPI (or equivalent backend framework)
-* SQLAlchemy
-* Postgres (RDS)
-* JWT authentication
-
----
-
-## 3. Client
-
-The Client is the user-facing interface.
-
-It communicates exclusively with the Application API.
-
-It never interacts with the Data Platform directly.
-
-### Technologies Used
-
-* Angular or React
-* REST API integration
-* Charting libraries
-
----
-
-# Data Architecture
-
-The platform follows a medallion architecture.
-
-## Bronze Layer (Raw)
-
-* Raw JSON payloads
-* Stored in S3
-* Append-only
-* Partitioned by date
-
-Example path:
+A batch financial data platform: fetch data from external providers, land it
+raw (Bronze), clean/normalize it (Silver), and load serving-ready tables into
+Postgres (Gold). Orchestrated with Airflow, storage on S3.
 
 ```
-s3://fin-platform-prod/bronze/source=yahoo/dataset=prices/dt=2026-02-17/AAPL.json
+external API -> Bronze (S3, raw JSON) -> Silver (S3, Parquet) -> Gold (Postgres)
 ```
 
----
+## What's implemented
 
-## Silver Layer (Cleaned)
+| Data | Source | Pipeline |
+| --- | --- | --- |
+| Daily prices (OHLCV) | Yahoo Finance | `src/orchestration/pipelines/run_prices.py` |
+| Macro/FX series | FRED | `src/orchestration/pipelines/run_macro.py` |
+| Fundamentals (XBRL) | SEC EDGAR | `src/orchestration/pipelines/run_fundamentals.py` |
+| Ticker <-> FIGI mapping | OpenFIGI | `src/orchestration/pipelines/run_map_figi.py` |
+| Historical backfill | Yahoo Finance | `src/orchestration/pipelines/backfill_prices.py` |
+| New ticker onboarding | Yahoo Finance | `src/orchestration/pipelines/run_register_ticker.py` |
 
-* Normalized schemas
-* Typed columns
-* Harmonized identifiers
-* Stored as Parquet in S3
+Each pipeline follows the same shape: `bronze_ingest -> silver_transform ->
+gold_load`, wrapped in an `ingestion_runs` row for observability. See
+[docs/STRUCTURE.md](docs/STRUCTURE.md) for where everything lives.
 
----
+## Setup
 
-## Gold Layer (Serving-Ready)
-
-* Computed metrics
-* Aggregated datasets
-* Optimized for fast queries
-* Stored as Parquet in S3
-* Loaded into Postgres
-
----
-
-# Daily Batch Process
-
-```mermaid
-sequenceDiagram
-participant AirflowScheduler
-participant IngestionService
-participant S3Storage
-participant TransformationService
-participant GoldLoader
-participant PostgresDatabase
-
-AirflowScheduler->>IngestionService: Execute fetch jobs
-IngestionService->>S3Storage: Store Bronze raw data
-
-AirflowScheduler->>TransformationService: Execute Silver and Gold transforms
-TransformationService->>S3Storage: Write Silver datasets
-TransformationService->>S3Storage: Write Gold datasets
-
-AirflowScheduler->>GoldLoader: Load Gold into Postgres
-GoldLoader->>PostgresDatabase: Upsert financial tables
+```bash
+uv sync
+cp .env.example .env   # fill in DATABASE_URL, BUCKET_ID, API keys
+uv run alembic upgrade head
 ```
 
----
+Required env vars (see `src/core/config.py` for the full list):
 
-# User Request Flow
+- `DATABASE_URL` — Postgres connection string
+- `BUCKET_ID` — S3 bucket for Bronze/Silver
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` — S3 credentials
+- `FRED_API_KEY`, `OPENFIGI_API_KEY` — provider API keys
 
-```mermaid
-sequenceDiagram
-participant Client
-participant AppAPI
-participant PostgresDatabase
+## Running a pipeline
 
-Client->>AppAPI: Request dashboard
-AppAPI->>PostgresDatabase: Query financial data
-PostgresDatabase-->>AppAPI: Return results
-AppAPI-->>Client: JSON response
+```bash
+uv run python -m src.orchestration.pipelines.run_prices          # one ticker/day
+uv run python -m src.orchestration.pipelines.backfill_prices --symbols AAPL,MSFT --start 2015-01-01
+uv run python -m src.orchestration.pipelines.run_register_ticker AAPL
 ```
 
----
+Airflow DAGs (`airflow/dags/`) run `run_prices_pipeline()` /
+`run_macro_pipeline()` daily against every ticker/series flagged
+`is_active` + `is_scheduled` in `universal_instruments` / `FRED_COLUMN_SERIES`.
 
-# AWS Infrastructure
+## Tests
 
-The infrastructure is intentionally minimal and cost-efficient.
-
-| Component    | Purpose                                  |
-| ------------ | ---------------------------------------- |
-| S3           | Data lake storage (Bronze, Silver, Gold) |
-| RDS Postgres | Serving database                         |
-| EC2          | Airflow host                             |
-| IAM          | Access control                           |
-
-Estimated monthly cost: approximately 20–25 USD.
-
----
-
-# Project Structure
-
-```
-services/
-  data-platform/
-    ingestion/
-    transforms/
-    marts/
-    loaders/
-
-  app-api/
-    routes/
-    services/
-    db/
-
-  frontend/
-
-infra/
-  airflow/
-  terraform/
-  docker/
+```bash
+uv run pytest tests/unit
 ```
 
----
+## Not yet built
 
-# Design Principles
-
-* Strict separation between data and application layers
-* Batch processing over live external API calls
-* Postgres as serving layer
-* S3 as scalable data lake
-* Cost control
-* Reproducibility and auditability
-* Production-ready architecture
-
----
-
-# Conclusion
-
-This project implements a structured financial data infrastructure with:
-
-* A clean medallion data architecture
-* A clear separation between Data Platform, Application, and Client
-* A scalable AWS deployment
-* A serving layer optimized for SaaS applications
-
-The system is designed for reliability, extensibility, and long-term scalability.
-
+- A FastAPI layer to serve the Gold tables to a frontend (`src/main.py` is
+  currently an empty app).
+- Using `instrument_figi` to reconcile the same instrument across Yahoo/SEC/FRED.

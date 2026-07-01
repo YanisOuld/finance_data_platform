@@ -1,6 +1,9 @@
 # upsert data
 
+from datetime import date
+
 import sqlalchemy as sa
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -34,3 +37,20 @@ def upsert_prices_1d(session: Session, rows: list[dict]) -> int:
 
     result = session.execute(stmt)
     return result.rowcount or 0
+
+
+def get_prices(
+    session: Session,
+    symbol: str,
+    *,
+    start: date | None = None,
+    end: date | None = None,
+    limit: int = 500,
+) -> list[Price1D]:
+    stmt = select(Price1D).where(Price1D.symbol == symbol.upper())
+    if start is not None:
+        stmt = stmt.where(Price1D.ts >= start)
+    if end is not None:
+        stmt = stmt.where(Price1D.ts <= end)
+    stmt = stmt.order_by(Price1D.ts.asc()).limit(limit)
+    return list(session.execute(stmt).scalars().all())
