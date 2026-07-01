@@ -2,6 +2,9 @@ import gzip
 import json
 
 from src.core.bucket_utils import get_s3_client
+from src.core.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def _get_s3():
@@ -23,7 +26,7 @@ def create_bronze_key(type: str, run_id: str, dt: str = None, symbol: str = None
         base = f"{base}/symbol={symbol}"
 
     url = f"{base}/run_id={run_id}.json.gz"
-    print(url)
+    logger.debug("%s", url)
     return url
 
 

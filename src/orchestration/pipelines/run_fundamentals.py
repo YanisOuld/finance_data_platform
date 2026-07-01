@@ -15,6 +15,7 @@ from datetime import date
 
 from src.core.config import settings
 from src.core.database import SessionLocal
+from src.core.logger import get_logger
 from src.data.crud.ingestion_run import finish_run, start_run
 from src.data.crud.ingestion_watermark import get_last_ts, upsert_watermark
 from src.ingestion.clients.sec_edgar_client import ingest_edgar_financial_to_bronze
@@ -23,6 +24,8 @@ from src.transformers.gold.writers.write_gold_fundamentals import write_gold_fun
 from src.transformers.silver.clean_sec import clean_bronze_sec, normalize_sec
 from src.transformers.silver.fetch_bronze import fetch_json_from_bronze
 from src.transformers.silver.write_silver import create_silver_key, store_to_s3
+
+logger = get_logger(__name__)
 
 
 def _split_s3_uri(uri: str) -> tuple[str, str]:
@@ -61,7 +64,7 @@ def run_fundamentals_pipeline(ticker: str, start: str | None = None, end: str | 
         bronze_uri = ingest_edgar_financial_to_bronze(
             settings.bucket_id, ticker=ticker, start=resolved_start, end=resolved_end
         )
-        print(f"bronze data written to: {bronze_uri}")
+        logger.info("bronze data written to: %s", bronze_uri)
         bucket, bronze_key = _split_s3_uri(bronze_uri)
 
         # --- SILVER ------------------------------------------------------
@@ -70,7 +73,7 @@ def run_fundamentals_pipeline(ticker: str, start: str | None = None, end: str | 
         df_silver = clean_bronze_sec(records)
 
         if df_silver.height == 0:
-            print(f"SKIP: no XBRL facts returned for ticker={ticker}.")
+            logger.info("SKIP: no XBRL facts returned for ticker=%s.", ticker)
             with SessionLocal() as session:
                 finish_run(
                     session,
@@ -84,13 +87,13 @@ def run_fundamentals_pipeline(ticker: str, start: str | None = None, end: str | 
 
         silver_key = create_silver_key(type=ticker.lower(), dt=resolved_start, vendor="sec_edgar")
         silver_path = store_to_s3(bucket=bucket, df=df_silver, s3_key=silver_key)
-        print(f"silver data written to: {silver_path}")
+        logger.info("silver data written to: %s", silver_path)
 
         # --- GOLD ----------------------------------------------------------
         _, skey = _split_s3_uri(silver_path)
         lazy_df = fetch_parquet_from_silver(bucket=bucket, key=skey)
         gold_rows = write_gold_fundamentals(lazy_df.collect())
-        print(f"gold upsert completed, rows: {gold_rows}")
+        logger.info("gold upsert completed, rows: %s", gold_rows)
 
         bronze_run_id = bronze_uri.rsplit("run_id=", 1)[-1].split(".")[0]
         max_ts = df_silver["period_end"].max()
@@ -120,4 +123,4 @@ def run_fundamentals_pipeline(ticker: str, start: str | None = None, end: str | 
 
 if __name__ == "__main__":
     rows = run_fundamentals_pipeline("SOFI")
-    print(f"pipeline finished, gold rows: {rows}")
+    logger.info("pipeline finished, gold rows: %s", rows)

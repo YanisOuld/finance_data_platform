@@ -56,6 +56,8 @@ class Settings(BaseSettings):
 
     redis_url: str | None = Field(default=None, validation_alias=AliasChoices("REDIS_URL"))
 
+    log_level: str = Field(default="INFO", validation_alias=AliasChoices("LOG_LEVEL"))
+
     @field_validator("database_url")
     @classmethod
     def _validate_database_url(cls, v: str) -> str:

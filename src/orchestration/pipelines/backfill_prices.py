@@ -23,7 +23,10 @@ import time
 from datetime import date, timedelta
 
 from src.core.constants import DEFAULT_BACKFILL_START
+from src.core.logger import get_logger
 from src.orchestration.pipelines.run_prices import run_prices_pipeline
+
+logger = get_logger(__name__)
 
 
 def chunk_symbols(symbols: list[str], batch_size: int) -> list[list[str]]:
@@ -80,18 +83,18 @@ def backfill_prices(
 
     for batch in symbol_batches:
         for chunk_start, chunk_end in date_chunks:
-            print(f"[backfill] symbols={batch} start={chunk_start} end={chunk_end}")
+            logger.info("symbols=%s start=%s end=%s", batch, chunk_start, chunk_end)
             try:
                 total_rows += run_prices_pipeline(batch, start=chunk_start, end=chunk_end)
             except Exception as e:
-                print(f"[backfill] FAILED symbols={batch} start={chunk_start} end={chunk_end}: {e}")
+                logger.error("FAILED symbols=%s start=%s end=%s: %s", batch, chunk_start, chunk_end, e)
                 failures.append(f"{batch}@{chunk_start}..{chunk_end}: {e}")
             time.sleep(sleep_seconds)
 
     if failures:
-        print(f"[backfill] finished with {len(failures)} failed chunk(s):")
+        logger.warning("finished with %s failed chunk(s):", len(failures))
         for f in failures:
-            print(f"  - {f}")
+            logger.warning("  - %s", f)
 
     return total_rows
 
@@ -117,4 +120,4 @@ if __name__ == "__main__":
         years_per_chunk=args.years_per_chunk,
         sleep_seconds=args.sleep_seconds,
     )
-    print(f"backfill finished, total gold rows: {rows}")
+    logger.info("backfill finished, total gold rows: %s", rows)

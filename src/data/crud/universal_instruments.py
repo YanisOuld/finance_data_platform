@@ -49,3 +49,17 @@ def get_or_create_instrument(
     session.commit()
     session.refresh(instrument)
     return instrument
+
+
+def set_scheduled(session: Session, ticker: str, is_scheduled: bool) -> UniversalInstrument | None:
+    """Toggle whether the daily ETL DAG auto-picks up this ticker, without
+    touching any other metadata. Returns None if the ticker isn't registered.
+    """
+    instrument = get_instrument(session, ticker)
+    if instrument is None:
+        return None
+
+    instrument.is_scheduled = is_scheduled
+    session.commit()
+    session.refresh(instrument)
+    return instrument

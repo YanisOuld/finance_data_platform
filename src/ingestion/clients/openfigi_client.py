@@ -1,7 +1,10 @@
 import requests
 
 from src.core.config import settings
+from src.core.logger import get_logger
 from src.ingestion.writers.write_bronze import write_bronze_to_s3
+
+logger = get_logger(__name__)
 
 """
 OpenFIGI /v3/mapping job: maps a ticker to its FIGI(s).
@@ -65,4 +68,4 @@ def ingest_openfigi_financial_to_bronze(
 
 if __name__ == "__main__":
     res = ingest_openfigi_financial_to_bronze(settings.bucket_id, symbol="AAPL")
-    print(res)
+    logger.info("%s", res)

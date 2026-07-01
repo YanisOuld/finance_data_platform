@@ -1,7 +1,10 @@
 import requests
 
 from src.core.config import settings
+from src.core.logger import get_logger
 from src.ingestion.writers.write_bronze import write_bronze_to_s3
+
+logger = get_logger(__name__)
 
 """
 Theory:
@@ -108,4 +111,4 @@ if __name__ == "__main__":
     res = ingest_edgar_financial_to_bronze(
         bucket=settings.bucket_id, ticker="SOFI", start="2026-02-01", end="2026-02-15"
     )
-    print(res)
+    logger.info("%s", res)
