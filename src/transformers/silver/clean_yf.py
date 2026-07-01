@@ -5,9 +5,12 @@ Fetch the json
 import polars as pl
 
 from src.core.config import settings
+from src.core.logger import get_logger
 
 from .fetch_bronze import create_bronze_key, fetch_json_from_bronze
 from .write_silver import create_silver_key, store_to_s3
+
+logger = get_logger(__name__)
 
 
 def normalize_info(info: dict):
@@ -30,8 +33,10 @@ def normalize_history(raw: dict) -> list[dict]:
     rows = payload.get("rows") or []
     errors = payload.get("errors") or []
     if errors:
-        print(
-            f"[WARN] normalize_history: {len(errors)} symbol(s) had no bronze rows: {[e.get('symbol') for e in errors]}"
+        logger.warning(
+            "normalize_history: %s symbol(s) had no bronze rows: %s",
+            len(errors),
+            [e.get("symbol") for e in errors],
         )
 
     out: list[dict] = []
@@ -91,4 +96,4 @@ if __name__ == "__main__":
     df = clean_bronze(table)
     silver_key = create_silver_key(type="history", dt="2026-02-24")
     store_to_s3(bucket=settings.bucket_id, df=df, s3_key=silver_key)
-    print(silver_key)
+    logger.info("%s", silver_key)

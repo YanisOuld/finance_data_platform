@@ -11,7 +11,10 @@ import requests
 import yfinance as yf
 
 from src.core.config import settings
+from src.core.logger import get_logger
 from src.ingestion.writers.write_bronze import write_bronze_to_s3
+
+logger = get_logger(__name__)
 
 
 # -----------------------------
@@ -28,11 +31,11 @@ def _debug_yahoo_chart(symbol: str) -> None:
         r = requests.get(url, timeout=20)
         ct = (r.headers.get("content-type") or "").lower()
         snippet = (r.text or "")[:140].replace("\n", " ")
-        print(
-            f"[DEBUG] yahoo_chart symbol={symbol} status={r.status_code} content-type={ct} first140={snippet}"
+        logger.debug(
+            "yahoo_chart symbol=%s status=%s content-type=%s first140=%s", symbol, r.status_code, ct, snippet
         )
     except Exception as e:
-        print(f"[DEBUG] yahoo_chart failed symbol={symbol} err={type(e).__name__}: {e}")
+        logger.debug("yahoo_chart failed symbol=%s err=%s: %s", symbol, type(e).__name__, e)
 
 
 # -----------------------------
@@ -92,8 +95,8 @@ def fetch_prices_1d_safe(
 
             if df is None or df.empty:
                 if debug_on_empty:
-                    print(
-                        f"[WARN] yf.download returned empty. symbols={syms} start={start_p} end_excl={end_excl}"
+                    logger.warning(
+                        "yf.download returned empty. symbols=%s start=%s end_excl=%s", syms, start_p, end_excl
                     )
                     # Debug 1 symbol only to keep noise down
                     _debug_yahoo_chart(syms[0])
@@ -148,7 +151,7 @@ def fetch_prices_1d_safe(
                     )
 
             if not rows and debug_on_empty:
-                print(f"[WARN] yf.download produced dataframe but no rows extracted. symbols={syms}")
+                logger.warning("yf.download produced dataframe but no rows extracted. symbols=%s", syms)
                 _debug_yahoo_chart(syms[0])
 
             return rows
@@ -156,7 +159,9 @@ def fetch_prices_1d_safe(
         except Exception as e:
             last_err = e
             sleep_s = min(60, (2**attempt) + random.random())
-            print(f"[WARN] yf.download failed attempt={attempt+1}/{max_retries} err={e} sleep={sleep_s:.2f}s")
+            logger.warning(
+                "yf.download failed attempt=%s/%s err=%s sleep=%.2fs", attempt + 1, max_retries, e, sleep_s
+            )
             time.sleep(sleep_s)
 
     raise RuntimeError(f"yfinance download failed after retries: {last_err}")
@@ -178,15 +183,20 @@ def fetch_info(symbol: str, *, max_retries: int = 5) -> dict[str, Any]:
             t = yf.Ticker(symbol)
             info = t.info
             if not isinstance(info, dict) or not info:
-                print(f"[WARN] empty info for symbol={symbol}")
+                logger.warning("empty info for symbol=%s", symbol)
                 _debug_yahoo_chart(symbol)
                 return {}
             return info
         except Exception as e:
             last_err = e
             sleep_s = min(60, (2**attempt) + random.random())
-            print(
-                f"[WARN] info failed symbol={symbol} attempt={attempt+1}/{max_retries} err={e} sleep={sleep_s:.2f}s"
+            logger.warning(
+                "info failed symbol=%s attempt=%s/%s err=%s sleep=%.2fs",
+                symbol,
+                attempt + 1,
+                max_retries,
+                e,
+                sleep_s,
             )
             time.sleep(sleep_s)
 
@@ -260,7 +270,7 @@ def ingest_yahoo_history_to_bronze(
     )
 
     s3_path = f"s3://{res.bucket}/{res.key}"
-    print(f"bronze data written to: {s3_path}")
+    logger.info("bronze data written to: %s", s3_path)
     return s3_path
 
 
@@ -289,4 +299,7 @@ def ingest_yahoo_info_to_bronze(bucket: str, symbol: str) -> str:
 
 
 if __name__ == "__main__":
-    print(ingest_yahoo_history_to_bronze(settings.bucket_id, ["AMZN"], start="2026-01-01", end="2026-01-02"))
+    logger.info(
+        "%s",
+        ingest_yahoo_history_to_bronze(settings.bucket_id, ["AMZN"], start="2026-01-01", end="2026-01-02"),
+    )

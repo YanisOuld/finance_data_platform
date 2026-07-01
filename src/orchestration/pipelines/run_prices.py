@@ -17,6 +17,7 @@ import polars as pl
 from src.core.config import settings
 from src.core.constants import DEFAULT_BACKFILL_START
 from src.core.database import SessionLocal
+from src.core.logger import get_logger
 from src.data.crud.ingestion_run import finish_run, start_run
 from src.data.crud.ingestion_watermark import get_last_ts, upsert_watermark
 from src.ingestion.clients.yahoo_client import ingest_yahoo_history_to_bronze
@@ -27,6 +28,8 @@ from src.transformers.quality.checks import check_prices_1d
 from src.transformers.silver.clean_yf import clean_bronze, normalize_history
 from src.transformers.silver.fetch_bronze import fetch_json_from_bronze
 from src.transformers.silver.write_silver import create_silver_key, store_to_s3
+
+logger = get_logger(__name__)
 
 
 def _split_s3_uri(uri: str) -> tuple[str, str]:
@@ -115,7 +118,7 @@ def gold_load(silver_info: dict) -> dict:
 
     report = check_prices_1d(df)
     for warning in report.warnings:
-        print(f"[QUALITY WARNING] {warning}")
+        logger.warning(warning)
 
     df_feat = add_return(df, "close")
     gold_rows = write_gold_price1D(df_feat)
@@ -145,14 +148,14 @@ def run_prices_pipeline(symbols: list[str] | str, start: str | None = None, end:
         resolved_end = end or date.today().isoformat()
 
         bronze_info = bronze_ingest(symbols_list, start=resolved_start, end=resolved_end)
-        print(f"bronze data written to: {bronze_info['bronze_s3_path']}")
+        logger.info("bronze data written to: %s", bronze_info["bronze_s3_path"])
 
         silver_info = silver_transform(bronze_info)
         failed = silver_info.get("failed_symbols") or []
         succeeded = len(symbols_list) - len(failed)
 
         if silver_info["silver_rows"] == 0:
-            print("SKIP: no rows after silver transform (market closed / Yahoo returned nothing).")
+            logger.info("SKIP: no rows after silver transform (market closed / Yahoo returned nothing).")
             with SessionLocal() as session:
                 finish_run(
                     session,
@@ -164,10 +167,12 @@ def run_prices_pipeline(symbols: list[str] | str, start: str | None = None, end:
                     notes="no rows after silver transform",
                 )
             return 0
-        print(f"silver data written to: {silver_info['silver_s3_path']} (rows={silver_info['silver_rows']})")
+        logger.info(
+            "silver data written to: %s (rows=%s)", silver_info["silver_s3_path"], silver_info["silver_rows"]
+        )
 
         gold_info = gold_load(silver_info)
-        print(f"gold upsert completed, rows: {gold_info['gold_rows']}")
+        logger.info("gold upsert completed, rows: %s", gold_info["gold_rows"])
 
         with SessionLocal() as session:
             finish_run(
@@ -198,4 +203,4 @@ def run_prices_pipeline(symbols: list[str] | str, start: str | None = None, end:
 if __name__ == "__main__":
     stocks = "SOFI"
     rows = run_prices_pipeline(stocks, start="2026-01-01", end="2026-03-01")
-    print(f"pipeline finished, gold rows: {rows}")
+    logger.info("pipeline finished, gold rows: %s", rows)

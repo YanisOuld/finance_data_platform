@@ -2,7 +2,10 @@ import requests
 
 from src.core.config import settings
 from src.core.constants import FRED_COLUMN_SERIES
+from src.core.logger import get_logger
 from src.ingestion.writers.write_bronze import write_bronze_to_s3
+
+logger = get_logger(__name__)
 
 BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
 
@@ -55,4 +58,4 @@ def ingest_fred_to_bronze(bucket: str, macro: str, start: str, end: str) -> str:
 
 if __name__ == "__main__":
     res = ingest_fred_to_bronze(settings.bucket_id, macro="cpi", start="2025-01-01", end="2025-12-31")
-    print(res)
+    logger.info("%s", res)
