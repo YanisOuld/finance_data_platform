@@ -19,6 +19,21 @@ def get_instrument(session: Session, ticker: str) -> UniversalInstrument | None:
     return session.execute(stmt).scalar_one_or_none()
 
 
+def list_instruments(
+    session: Session,
+    *,
+    is_active: bool | None = None,
+    is_scheduled: bool | None = None,
+) -> list[UniversalInstrument]:
+    stmt = select(UniversalInstrument)
+    if is_active is not None:
+        stmt = stmt.where(UniversalInstrument.is_active == is_active)
+    if is_scheduled is not None:
+        stmt = stmt.where(UniversalInstrument.is_scheduled == is_scheduled)
+    stmt = stmt.order_by(UniversalInstrument.ticker)
+    return list(session.execute(stmt).scalars().all())
+
+
 def get_or_create_instrument(
     session: Session,
     ticker: str,
