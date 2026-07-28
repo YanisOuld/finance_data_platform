@@ -2,6 +2,7 @@ import requests
 
 from src.core.config import settings
 from src.core.logger import get_logger
+from src.core.retry import call_with_backoff
 from src.ingestion.writers.write_bronze import write_bronze_to_s3
 
 logger = get_logger(__name__)
@@ -31,9 +32,14 @@ HEADERS = {
 
 
 def _get_json(url: str) -> dict:
-    r = requests.get(url, headers=HEADERS, timeout=30)
-    r.raise_for_status()
-    return r.json()
+    def _do_request() -> dict:
+        r = requests.get(url, headers=HEADERS, timeout=30)
+        r.raise_for_status()
+        return r.json()
+
+    return call_with_backoff(
+        _do_request, retry_on=(requests.RequestException,), description=f"SEC EDGAR GET {url}"
+    )
 
 
 def _create_url(cik: str, request_type: str):
@@ -62,9 +68,7 @@ def _load_cik_table() -> dict[str, str]:
         return _CIK_BY_TICKER
 
     url = "https://www.sec.gov/files/company_tickers.json"
-    r = requests.get(url, headers=HEADERS, timeout=30)
-    r.raise_for_status()
-    data = r.json()
+    data = _get_json(url)
 
     _CIK_BY_TICKER = {stock["ticker"].upper(): str(stock["cik_str"]).zfill(10) for stock in data.values()}
     return _CIK_BY_TICKER
