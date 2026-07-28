@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from src.api.deps import require_api_key
 from src.api.schemas import InstrumentCreate, InstrumentResponse, ScheduledUpdate
 from src.core.database import get_db
 from src.core.logger import get_logger
@@ -13,7 +14,7 @@ from src.orchestration.pipelines.run_register_ticker import register_ticker, val
 
 logger = get_logger(__name__)
 
-router = APIRouter(prefix="/instruments", tags=["instruments"])
+router = APIRouter(prefix="/instruments", tags=["instruments"], dependencies=[Depends(require_api_key)])
 
 DbSession = Annotated[Session, Depends(get_db)]
 

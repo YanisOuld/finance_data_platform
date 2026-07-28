@@ -2,6 +2,7 @@ import requests
 
 from src.core.config import settings
 from src.core.logger import get_logger
+from src.core.retry import call_with_backoff
 from src.ingestion.writers.write_bronze import write_bronze_to_s3
 
 logger = get_logger(__name__)
@@ -37,9 +38,15 @@ def _create_job(ticker: str) -> dict:
 
 def fetch_map(symbol: str) -> dict:
     job = _create_job(symbol)
-    res = requests.post(BASE_URL, headers=HEADERS, json=[job], timeout=30)
-    res.raise_for_status()
-    data = res.json()
+
+    def _do_request() -> dict:
+        res = requests.post(BASE_URL, headers=HEADERS, json=[job], timeout=30)
+        res.raise_for_status()
+        return res.json()
+
+    data = call_with_backoff(
+        _do_request, retry_on=(requests.RequestException,), description=f"OpenFIGI mapping symbol={symbol}"
+    )
 
     # OpenFIGI returns a list with one entry per submitted job; ours has exactly one.
     result = data[0] if isinstance(data, list) and data else {}

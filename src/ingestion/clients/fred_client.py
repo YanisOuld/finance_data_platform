@@ -3,6 +3,7 @@ import requests
 from src.core.config import settings
 from src.core.constants import FRED_COLUMN_SERIES
 from src.core.logger import get_logger
+from src.core.retry import call_with_backoff
 from src.ingestion.writers.write_bronze import write_bronze_to_s3
 
 logger = get_logger(__name__)
@@ -35,9 +36,16 @@ def fetch_series(macro: str, start: str, end: str) -> dict:
         "observation_end": end,
     }
 
-    res = requests.get(url=BASE_URL, params=params, timeout=30)
-    res.raise_for_status()
-    return res.json()
+    def _do_request() -> dict:
+        res = requests.get(url=BASE_URL, params=params, timeout=30)
+        res.raise_for_status()
+        return res.json()
+
+    return call_with_backoff(
+        _do_request,
+        retry_on=(requests.RequestException,),
+        description=f"FRED fetch series={series_id}",
+    )
 
 
 def ingest_fred_to_bronze(bucket: str, macro: str, start: str, end: str) -> str:

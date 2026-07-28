@@ -5,12 +5,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from src.api.deps import require_api_key
 from src.api.schemas import FundamentalResponse
 from src.core.database import get_db
 from src.data.crud.fundamentals import get_fundamentals
 from src.data.crud.universal_instruments import get_instrument
 
-router = APIRouter(prefix="/fundamentals", tags=["fundamentals"])
+router = APIRouter(prefix="/fundamentals", tags=["fundamentals"], dependencies=[Depends(require_api_key)])
 
 DbSession = Annotated[Session, Depends(get_db)]
 

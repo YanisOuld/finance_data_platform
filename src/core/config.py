@@ -55,6 +55,11 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO", validation_alias=AliasChoices("LOG_LEVEL"))
 
+    # Shared secret checked by src/api/deps.py::require_api_key against the
+    # X-API-Key header. Enforced everywhere except environment="local" -- see
+    # require_api_key's docstring for the fail-open/fail-closed rationale.
+    api_key: str | None = Field(default=None, validation_alias=AliasChoices("API_KEY"))
+
     @field_validator("database_url")
     @classmethod
     def _validate_database_url(cls, v: str) -> str:

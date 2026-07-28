@@ -3,6 +3,7 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
+import src.api.deps as deps
 import src.api.routes.fundamentals as fundamentals_router
 import src.api.routes.instruments as instruments_router
 import src.api.routes.prices as prices_router
@@ -213,3 +214,65 @@ def test_get_fundamentals_returns_rows(monkeypatch, client):
 
     assert resp.status_code == 200
     assert resp.json()[0]["concept"] == "us-gaap:Revenues"
+
+
+def test_health_does_not_require_api_key(monkeypatch, client):
+    monkeypatch.setattr(deps.settings, "environment", "prod")
+    monkeypatch.setattr(deps.settings, "api_key", "secret123")
+
+    class _FakeSession:
+        def execute(self, *args, **kwargs):
+            return None
+
+    def _fake_get_db():
+        yield _FakeSession()
+
+    app.dependency_overrides[get_db] = _fake_get_db
+
+    resp = client.get("/health")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok"}
+
+
+def test_instruments_route_enforces_api_key_when_configured(monkeypatch, client):
+    monkeypatch.setattr(deps.settings, "environment", "prod")
+    monkeypatch.setattr(deps.settings, "api_key", "secret123")
+    monkeypatch.setattr(
+        instruments_router, "list_instruments", lambda db, is_active=None, is_scheduled=None: []
+    )
+
+    resp_no_key = client.get("/instruments")
+    resp_with_key = client.get("/instruments", headers={"X-API-Key": "secret123"})
+
+    assert resp_no_key.status_code == 401
+    assert resp_with_key.status_code == 200
+
+
+def test_health_returns_503_when_db_is_unreachable(client):
+    def _fake_get_db():
+        class _BrokenSession:
+            def execute(self, *args, **kwargs):
+                raise RuntimeError("connection refused")
+
+        yield _BrokenSession()
+
+    app.dependency_overrides[get_db] = _fake_get_db
+
+    resp = client.get("/health")
+
+    assert resp.status_code == 503
+    assert "database unavailable" in resp.json()["detail"]
+
+
+def test_missing_api_key_is_checked_before_body_validation(monkeypatch, client):
+    """Router-level dependencies (require_api_key) run before the route
+    handler, so a missing key on a mutating route must short-circuit to 401
+    -- not fall through to a 422 on the (also-invalid) request body.
+    """
+    monkeypatch.setattr(deps.settings, "environment", "prod")
+    monkeypatch.setattr(deps.settings, "api_key", "secret123")
+
+    resp = client.post("/instruments", json={})  # missing required "ticker" field too
+
+    assert resp.status_code == 401
