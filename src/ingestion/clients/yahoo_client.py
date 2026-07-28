@@ -241,10 +241,8 @@ def ingest_yahoo_history_to_bronze(
     if not syms:
         raise ValueError("symbols must contain at least one ticker")
 
-    # fetch prices (batch)
     rows: list[dict[str, Any]] = fetch_prices_1d_safe(syms, start=start, end=end)
 
-    # We can detect missing tickers by checking which symbols appear in rows
     seen = {r.get("symbol") for r in rows if isinstance(r, dict)}
     errors: list[dict[str, Any]] = []
     for sym in syms:

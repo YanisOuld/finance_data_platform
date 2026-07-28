@@ -21,9 +21,6 @@ import os
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Only psycopg2 is installed (see requirements.txt) -- restricting to the
-# schemes it actually supports so a typo'd "+psycopg" (v3) URL fails here
-# with a clear message instead of an ImportError deep inside SQLAlchemy.
 _ALLOWED_DATABASE_SCHEMES = ("postgresql://", "postgresql+psycopg2://")
 
 
