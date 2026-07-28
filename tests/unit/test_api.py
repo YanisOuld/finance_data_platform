@@ -3,9 +3,9 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
-import src.api.routers.fundamentals as fundamentals_router
-import src.api.routers.instruments as instruments_router
-import src.api.routers.prices as prices_router
+import src.api.routes.fundamentals as fundamentals_router
+import src.api.routes.instruments as instruments_router
+import src.api.routes.prices as prices_router
 from src.core.database import get_db
 from src.main import app
 
