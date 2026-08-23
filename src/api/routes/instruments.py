@@ -6,9 +6,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from src.api.deps import require_api_key
-from src.api.schemas import InstrumentCreate, InstrumentResponse, ScheduledUpdate
+from src.api.schemas import FigiResponse, InstrumentCreate, InstrumentResponse, ScheduledUpdate
+from src.core.cache import cache_get_json, cache_set_json
 from src.core.database import get_db
 from src.core.logger import get_logger
+from src.data.crud.instrument_figi import get_figi_mappings
 from src.data.crud.universal_instruments import get_instrument, list_instruments, set_scheduled
 from src.orchestration.pipelines.run_register_ticker import register_ticker, validate_and_upsert_ticker
 
@@ -64,3 +66,26 @@ def update_scheduled_route(ticker: str, body: ScheduledUpdate, db: DbSession):
     if instrument is None:
         raise HTTPException(status_code=404, detail=f"'{ticker}' is not registered")
     return instrument
+
+
+@router.get("/{ticker}/figi", response_model=list[FigiResponse])
+def get_instrument_figi_route(ticker: str, db: DbSession):
+    """A ticker can resolve to several FIGI candidates across exchanges (see
+    instrument_figi's docstring) -- this returns every one on file, not a
+    single "the" FIGI.
+    """
+    ticker = ticker.upper()
+    cache_key = f"figi:{ticker}"
+
+    cached = cache_get_json(cache_key)
+    if cached is not None:
+        return cached
+
+    if get_instrument(db, ticker) is None:
+        raise HTTPException(status_code=404, detail=f"'{ticker}' is not registered")
+
+    rows = get_figi_mappings(db, ticker)
+    payload = [FigiResponse.model_validate(r).model_dump(mode="json") for r in rows]
+    cache_set_json(cache_key, payload, ttl_seconds=300)
+
+    return rows

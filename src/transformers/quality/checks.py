@@ -87,3 +87,75 @@ def check_prices_1d(df: pl.DataFrame, *, max_null_close_ratio: float = 0.05) -> 
         warnings.append(f"{bad_ohlc} rows violate low<=close<=high<=... ordering")
 
     return QualityReport(dataset=dataset, row_count=row_count, warnings=warnings)
+
+
+def _check_required_and_duplicates(
+    df: pl.DataFrame, *, dataset: str, required_cols: set[str], key_cols: list[str]
+) -> tuple[list[str], int]:
+    """Shared hard checks every Silver dataframe gets: non-empty, has the
+    columns the Gold table needs, and no duplicate primary-key rows (an
+    ON CONFLICT upsert would silently pick one and drop the other).
+    """
+    row_count = df.height
+    if row_count == 0:
+        _fail(dataset, "silver dataframe is empty, refusing to load into gold")
+
+    missing = required_cols - set(df.columns)
+    if missing:
+        _fail(dataset, f"missing required columns: {sorted(missing)}")
+
+    dup_count = row_count - df.unique(subset=key_cols).height
+    if dup_count > 0:
+        _fail(dataset, f"{dup_count} duplicate {tuple(key_cols)} rows found")
+
+    return [], row_count
+
+
+def check_macro_series(df: pl.DataFrame, *, max_null_value_ratio: float = 0.05) -> QualityReport:
+    """Validate a Silver macro_series dataframe (FRED) before Gold load."""
+    dataset = "macro_series"
+    warnings, row_count = _check_required_and_duplicates(
+        df, dataset=dataset, required_cols={"series", "ts", "value"}, key_cols=["series", "ts"]
+    )
+
+    null_value = df.filter(pl.col("value").is_null()).height
+    null_ratio = null_value / row_count
+    if null_ratio > max_null_value_ratio:
+        _fail(
+            dataset,
+            f"{null_value}/{row_count} ({null_ratio:.1%}) rows have a null value, "
+            f"exceeds threshold of {max_null_value_ratio:.1%}",
+        )
+    elif null_value > 0:
+        warnings.append(f"{null_value} rows have a null value")
+
+    return QualityReport(dataset=dataset, row_count=row_count, warnings=warnings)
+
+
+def check_fundamentals(df: pl.DataFrame) -> QualityReport:
+    """Validate a Silver fundamentals dataframe (SEC EDGAR XBRL) before Gold load."""
+    dataset = "fundamentals"
+    warnings, row_count = _check_required_and_duplicates(
+        df,
+        dataset=dataset,
+        required_cols={"ticker", "concept", "unit", "period_end", "fp", "form", "val"},
+        key_cols=["ticker", "concept", "unit", "period_end", "fp", "form"],
+    )
+
+    null_val = df.filter(pl.col("val").is_null()).height
+    if null_val > 0:
+        # val is NOT NULL in the fundamentals table -- this would fail the
+        # upsert outright, so it's a hard failure, not a warning.
+        _fail(dataset, f"{null_val} rows have a null val (fundamentals.val is NOT NULL)")
+
+    return QualityReport(dataset=dataset, row_count=row_count, warnings=warnings)
+
+
+def check_instrument_figi(df: pl.DataFrame) -> QualityReport:
+    """Validate a Silver instrument_figi dataframe (OpenFIGI) before Gold load."""
+    dataset = "instrument_figi"
+    warnings, row_count = _check_required_and_duplicates(
+        df, dataset=dataset, required_cols={"ticker", "figi"}, key_cols=["ticker", "figi"]
+    )
+
+    return QualityReport(dataset=dataset, row_count=row_count, warnings=warnings)

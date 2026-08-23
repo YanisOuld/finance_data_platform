@@ -44,10 +44,17 @@ def upsert_fundamentals(session: Session, rows: list[dict]) -> int:
 
 
 def get_fundamentals(
-    session: Session, ticker: str, *, concept: str | None = None, limit: int = 500
+    session: Session, ticker: str, *, concept: str | None = None, limit: int = 500, offset: int = 0
 ) -> list[Fundamental]:
     stmt = select(Fundamental).where(Fundamental.ticker == ticker.upper())
     if concept is not None:
         stmt = stmt.where(Fundamental.concept == concept)
-    stmt = stmt.order_by(Fundamental.period_end.desc()).limit(limit)
+    stmt = stmt.order_by(Fundamental.period_end.desc()).offset(offset).limit(limit)
     return list(session.execute(stmt).scalars().all())
+
+
+def count_fundamentals(session: Session, ticker: str, *, concept: str | None = None) -> int:
+    stmt = select(sa.func.count()).select_from(Fundamental).where(Fundamental.ticker == ticker.upper())
+    if concept is not None:
+        stmt = stmt.where(Fundamental.concept == concept)
+    return session.execute(stmt).scalar_one()

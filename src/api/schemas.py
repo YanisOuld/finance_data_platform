@@ -55,3 +55,24 @@ class FundamentalResponse(BaseModel):
     fp: str
     form: str
     val: float
+
+
+class MacroSeriesResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    series: str
+    ts: date
+    value: float | None
+
+
+class FigiResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    ticker: str
+    figi: str
+    composite_figi: str | None
+    share_class_figi: str | None
+    security_type: str | None
+    market_sector: str | None
+    exch_code: str | None
+    name: str | None

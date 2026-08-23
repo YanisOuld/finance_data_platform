@@ -24,6 +24,7 @@ from src.data.crud.ingestion_run import finish_run, start_run
 from src.ingestion.clients.openfigi_client import ingest_openfigi_financial_to_bronze
 from src.transformers.gold.writers.fetch_silver import fetch_parquet_from_silver
 from src.transformers.gold.writers.write_gold_figi import write_gold_figi
+from src.transformers.quality.checks import check_instrument_figi
 from src.transformers.silver.clean_openfigi import clean_bronze_openfigi, normalize_openfigi
 from src.transformers.silver.fetch_bronze import fetch_json_from_bronze
 from src.transformers.silver.write_silver import create_silver_key, store_to_s3
@@ -68,6 +69,10 @@ def run_map_figi_pipeline(ticker: str) -> int:
                     notes="no FIGI candidates returned",
                 )
             return 0
+
+        report = check_instrument_figi(df_silver)
+        for warning in report.warnings:
+            logger.warning(warning)
 
         silver_key = create_silver_key(type=ticker.lower(), dt=date.today().isoformat(), vendor="openfigi")
         silver_path = store_to_s3(bucket=bucket, df=df_silver, s3_key=silver_key)

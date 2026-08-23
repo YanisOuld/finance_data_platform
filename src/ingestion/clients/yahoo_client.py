@@ -16,6 +16,23 @@ from src.ingestion.writers.write_bronze import write_bronze_to_s3
 
 logger = get_logger(__name__)
 
+# Yahoo's unofficial API rate-limits aggressively -- observed 429s even on
+# the very first request of a fresh run. This enforces a minimum gap between
+# ANY two outbound Yahoo calls in this process (on top of the per-call
+# exponential backoff on failure below, which only kicks in *after* a call
+# has already failed).
+_MIN_SECONDS_BETWEEN_CALLS = 2.0
+_last_call_at: float = 0.0
+
+
+def _throttle_yahoo_calls() -> None:
+    global _last_call_at
+    elapsed = time.monotonic() - _last_call_at
+    wait_s = _MIN_SECONDS_BETWEEN_CALLS - elapsed
+    if wait_s > 0:
+        time.sleep(wait_s)
+    _last_call_at = time.monotonic()
+
 
 # -----------------------------
 # Debug helper (optional)
@@ -26,6 +43,7 @@ def _debug_yahoo_chart(symbol: str) -> None:
     - 429 rate limit
     - HTML responses / blocking
     """
+    _throttle_yahoo_calls()
     try:
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=5d&interval=1d"
         r = requests.get(url, timeout=20)
@@ -81,6 +99,7 @@ def fetch_prices_1d_safe(
     last_err: Exception | None = None
 
     for attempt in range(max_retries):
+        _throttle_yahoo_calls()
         try:
             df = yf.download(
                 tickers=syms,
@@ -158,7 +177,7 @@ def fetch_prices_1d_safe(
 
         except Exception as e:
             last_err = e
-            sleep_s = min(60, (2**attempt) + random.random())
+            sleep_s = min(60, 2 * (2**attempt) + random.random())
             logger.warning(
                 "yf.download failed attempt=%s/%s err=%s sleep=%.2fs", attempt + 1, max_retries, e, sleep_s
             )
@@ -179,6 +198,7 @@ def fetch_info(symbol: str, *, max_retries: int = 5) -> dict[str, Any]:
     last_err: Exception | None = None
 
     for attempt in range(max_retries):
+        _throttle_yahoo_calls()
         try:
             t = yf.Ticker(symbol)
             info = t.info
@@ -189,7 +209,7 @@ def fetch_info(symbol: str, *, max_retries: int = 5) -> dict[str, Any]:
             return info
         except Exception as e:
             last_err = e
-            sleep_s = min(60, (2**attempt) + random.random())
+            sleep_s = min(60, 2 * (2**attempt) + random.random())
             logger.warning(
                 "info failed symbol=%s attempt=%s/%s err=%s sleep=%.2fs",
                 symbol,

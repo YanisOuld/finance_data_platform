@@ -14,6 +14,11 @@ Each chunk goes through the normal bronze -> silver -> gold path (and gets
 its own ingestion_runs row), so a failure partway through a multi-year
 backfill only loses that one chunk, not the whole run -- it can be re-run
 without redoing everything already loaded (the Gold upsert is idempotent).
+
+`sleep_seconds` between chunks is on top of the per-call throttle already
+enforced inside yahoo_client.py (_throttle_yahoo_calls) -- that one paces
+individual Yahoo requests, this one adds extra breathing room between
+whole backfill chunks specifically.
 """
 
 from __future__ import annotations
@@ -68,7 +73,7 @@ def backfill_prices(
     end: str | None = None,
     ticker_batch_size: int = 5,
     years_per_chunk: int = 1,
-    sleep_seconds: float = 1.0,
+    sleep_seconds: float = 2.0,
 ) -> int:
     symbols = [s.strip().upper() for s in symbols if s and s.strip()]
     if not symbols:
@@ -106,7 +111,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--end", default=None, help="YYYY-MM-DD (default: today)")
     parser.add_argument("--ticker-batch-size", type=int, default=5)
     parser.add_argument("--years-per-chunk", type=int, default=1)
-    parser.add_argument("--sleep-seconds", type=float, default=1.0)
+    parser.add_argument("--sleep-seconds", type=float, default=2.0)
     return parser.parse_args()
 
 

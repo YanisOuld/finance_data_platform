@@ -46,11 +46,21 @@ def get_prices(
     start: date | None = None,
     end: date | None = None,
     limit: int = 500,
+    offset: int = 0,
 ) -> list[Price1D]:
     stmt = select(Price1D).where(Price1D.symbol == symbol.upper())
     if start is not None:
         stmt = stmt.where(Price1D.ts >= start)
     if end is not None:
         stmt = stmt.where(Price1D.ts <= end)
-    stmt = stmt.order_by(Price1D.ts.asc()).limit(limit)
+    stmt = stmt.order_by(Price1D.ts.asc()).offset(offset).limit(limit)
     return list(session.execute(stmt).scalars().all())
+
+
+def count_prices(session: Session, symbol: str, *, start: date | None = None, end: date | None = None) -> int:
+    stmt = select(sa.func.count()).select_from(Price1D).where(Price1D.symbol == symbol.upper())
+    if start is not None:
+        stmt = stmt.where(Price1D.ts >= start)
+    if end is not None:
+        stmt = stmt.where(Price1D.ts <= end)
+    return session.execute(stmt).scalar_one()

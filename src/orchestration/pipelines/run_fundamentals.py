@@ -21,6 +21,7 @@ from src.data.crud.ingestion_watermark import get_last_ts, upsert_watermark
 from src.ingestion.clients.sec_edgar_client import ingest_edgar_financial_to_bronze
 from src.transformers.gold.writers.fetch_silver import fetch_parquet_from_silver
 from src.transformers.gold.writers.write_gold_fundamentals import write_gold_fundamentals
+from src.transformers.quality.checks import check_fundamentals
 from src.transformers.silver.clean_sec import clean_bronze_sec, normalize_sec
 from src.transformers.silver.fetch_bronze import fetch_json_from_bronze
 from src.transformers.silver.write_silver import create_silver_key, store_to_s3
@@ -84,6 +85,10 @@ def run_fundamentals_pipeline(ticker: str, start: str | None = None, end: str | 
                     notes="no XBRL facts returned",
                 )
             return 0
+
+        report = check_fundamentals(df_silver)
+        for warning in report.warnings:
+            logger.warning(warning)
 
         silver_key = create_silver_key(type=ticker.lower(), dt=resolved_start, vendor="sec_edgar")
         silver_path = store_to_s3(bucket=bucket, df=df_silver, s3_key=silver_key)

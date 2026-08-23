@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 import src.api.deps as deps
 import src.api.routes.fundamentals as fundamentals_router
 import src.api.routes.instruments as instruments_router
+import src.api.routes.macro as macro_router
 import src.api.routes.prices as prices_router
 from src.core.database import get_db
 from src.main import app
@@ -36,6 +37,17 @@ def _override_get_db():
     app.dependency_overrides[get_db] = lambda: iter([None])
     yield
     app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.fixture(autouse=True)
+def _disable_cache(monkeypatch):
+    """The routes call cache_get_json/cache_set_json unconditionally; without
+    this, tests would depend on whatever REDIS_URL happens to be in the local
+    .env (or hang on a connection timeout when nothing's listening there).
+    """
+    for module in (prices_router, fundamentals_router, macro_router, instruments_router):
+        monkeypatch.setattr(module, "cache_get_json", lambda key: None)
+        monkeypatch.setattr(module, "cache_set_json", lambda key, value, ttl_seconds=60: None)
 
 
 @pytest.fixture
@@ -166,12 +178,14 @@ def test_get_prices_returns_rows(monkeypatch, client):
         close_returns=0.01,
     )
     monkeypatch.setattr(
-        prices_router, "get_prices", lambda db, ticker, start=None, end=None, limit=500: [row]
+        prices_router, "get_prices", lambda db, ticker, start=None, end=None, limit=500, offset=0: [row]
     )
+    monkeypatch.setattr(prices_router, "count_prices", lambda db, ticker, start=None, end=None: 1)
 
     resp = client.get("/prices/SOFI")
 
     assert resp.status_code == 200
+    assert resp.headers["X-Total-Count"] == "1"
     assert resp.json() == [
         {
             "symbol": "SOFI",
@@ -207,12 +221,16 @@ def test_get_fundamentals_returns_rows(monkeypatch, client):
         val=1000.0,
     )
     monkeypatch.setattr(
-        fundamentals_router, "get_fundamentals", lambda db, ticker, concept=None, limit=500: [row]
+        fundamentals_router,
+        "get_fundamentals",
+        lambda db, ticker, concept=None, limit=500, offset=0: [row],
     )
+    monkeypatch.setattr(fundamentals_router, "count_fundamentals", lambda db, ticker, concept=None: 1)
 
     resp = client.get("/fundamentals/SOFI")
 
     assert resp.status_code == 200
+    assert resp.headers["X-Total-Count"] == "1"
     assert resp.json()[0]["concept"] == "us-gaap:Revenues"
 
 
@@ -276,3 +294,81 @@ def test_missing_api_key_is_checked_before_body_validation(monkeypatch, client):
     resp = client.post("/instruments", json={})  # missing required "ticker" field too
 
     assert resp.status_code == 401
+
+
+def test_get_macro_series_rejects_unknown_series(client):
+    resp = client.get("/macro/not-a-real-series")
+
+    assert resp.status_code == 404
+
+
+def test_get_macro_series_returns_rows(monkeypatch, client):
+    row = _FakeInstrument(series="cpi", ts=date(2026, 1, 1), value=3.1)
+    monkeypatch.setattr(
+        macro_router, "get_macro_series", lambda db, series, start=None, end=None, limit=500, offset=0: [row]
+    )
+    monkeypatch.setattr(macro_router, "count_macro_series", lambda db, series, start=None, end=None: 1)
+
+    resp = client.get("/macro/cpi")
+
+    assert resp.status_code == 200
+    assert resp.headers["X-Total-Count"] == "1"
+    assert resp.json() == [{"series": "cpi", "ts": "2026-01-01", "value": 3.1}]
+
+
+def test_get_instrument_figi_404_for_unregistered_ticker(monkeypatch, client):
+    monkeypatch.setattr(instruments_router, "get_instrument", lambda db, ticker: None)
+
+    resp = client.get("/instruments/NOTREAL/figi")
+
+    assert resp.status_code == 404
+
+
+def test_get_instrument_figi_returns_all_candidates(monkeypatch, client):
+    monkeypatch.setattr(instruments_router, "get_instrument", lambda db, ticker: _instrument())
+    rows = [
+        _FakeInstrument(
+            ticker="SOFI",
+            figi="FIGI1",
+            composite_figi=None,
+            share_class_figi=None,
+            security_type=None,
+            market_sector=None,
+            exch_code="US",
+            name=None,
+        ),
+        _FakeInstrument(
+            ticker="SOFI",
+            figi="FIGI2",
+            composite_figi=None,
+            share_class_figi=None,
+            security_type=None,
+            market_sector=None,
+            exch_code="LN",
+            name=None,
+        ),
+    ]
+    monkeypatch.setattr(instruments_router, "get_figi_mappings", lambda db, ticker: rows)
+
+    resp = client.get("/instruments/SOFI/figi")
+
+    assert resp.status_code == 200
+    assert [r["figi"] for r in resp.json()] == ["FIGI1", "FIGI2"]
+
+
+def test_unhandled_exception_returns_generic_500(monkeypatch):
+    def _boom(db, ticker):
+        raise RuntimeError("boom: something internal broke")
+
+    monkeypatch.setattr(instruments_router, "get_instrument", _boom)
+
+    # TestClient's default raise_server_exceptions=True re-raises after the
+    # exception handler already sent its response (Starlette's
+    # ServerErrorMiddleware does this deliberately, so bugs aren't hidden
+    # during testing) -- disable it here to assert on the response instead.
+    no_raise_client = TestClient(app, raise_server_exceptions=False)
+    resp = no_raise_client.get("/instruments/SOFI")
+
+    assert resp.status_code == 500
+    assert resp.json() == {"detail": "Internal server error"}
+    assert "boom" not in resp.text

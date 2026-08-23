@@ -1,27 +1,50 @@
 # Finance Data Platform
 
 A batch financial data platform: fetch data from external providers, land it
-raw (Bronze), clean/normalize it (Silver), and load serving-ready tables into
-Postgres (Gold). Orchestrated with Airflow, storage on S3.
+raw (Bronze), clean/normalize it (Silver), load serving-ready tables into
+Postgres (Gold), and serve them through a FastAPI. Orchestrated with Airflow,
+storage on S3.
 
 ```
-external API -> Bronze (S3, raw JSON) -> Silver (S3, Parquet) -> Gold (Postgres)
+external API -> Bronze (S3, raw JSON) -> Silver (S3, Parquet) -> Gold (Postgres) -> API
 ```
 
 ## What's implemented
 
-| Data | Source | Pipeline |
-| --- | --- | --- |
-| Daily prices (OHLCV) | Yahoo Finance | `src/orchestration/pipelines/run_prices.py` |
-| Macro/FX series | FRED | `src/orchestration/pipelines/run_macro.py` |
-| Fundamentals (XBRL) | SEC EDGAR | `src/orchestration/pipelines/run_fundamentals.py` |
-| Ticker <-> FIGI mapping | OpenFIGI | `src/orchestration/pipelines/run_map_figi.py` |
-| Historical backfill | Yahoo Finance | `src/orchestration/pipelines/backfill_prices.py` |
-| New ticker onboarding | Yahoo Finance | `src/orchestration/pipelines/run_register_ticker.py` |
+| Data | Source | Pipeline | Airflow DAG |
+| --- | --- | --- | --- |
+| Daily prices (OHLCV) | Yahoo Finance | `run_prices.py` | `yf_prices_1d_daily` |
+| Macro/FX series | FRED | `run_macro.py` | `fred_macro_weekly` |
+| Fundamentals (XBRL) | SEC EDGAR | `run_fundamentals.py` | `sec_fundamentals_weekly` |
+| Ticker <-> FIGI mapping | OpenFIGI | `run_map_figi.py` | `openfigi_mapping_weekly` |
+| Historical backfill | Yahoo Finance | `backfill_prices.py` | on-demand only |
+| New ticker onboarding | Yahoo Finance | `run_register_ticker.py` | on-demand only |
 
-Each pipeline follows the same shape: `bronze_ingest -> silver_transform ->
-gold_load`, wrapped in an `ingestion_runs` row for observability. See
+Pipelines live in `src/orchestration/pipelines/`. Each follows the same
+shape (`bronze_ingest -> silver_transform -> gold_load`), runs a quality
+check (`src/transformers/quality/checks.py`) before the Gold upsert, and is
+wrapped in an `ingestion_runs` row for observability. See
 [docs/STRUCTURE.md](docs/STRUCTURE.md) for where everything lives.
+
+## API
+
+`src/main.py` — FastAPI, served via `uvicorn` (see `Dockerfile`).
+
+| Route | What |
+| --- | --- |
+| `GET /health` | DB connectivity check, no auth (for Docker/LB healthchecks) |
+| `GET /instruments`, `GET /instruments/{ticker}` | registered tickers |
+| `POST /instruments` | register a ticker + kick off an initial backfill |
+| `PATCH /instruments/{ticker}/scheduled` | toggle the daily auto-ETL on/off |
+| `GET /instruments/{ticker}/figi` | OpenFIGI candidates for a ticker |
+| `GET /prices/{ticker}` | daily OHLCV, filterable by `start`/`end` |
+| `GET /fundamentals/{ticker}` | XBRL facts, filterable by `concept` |
+| `GET /macro/{series}` | FRED series, filterable by `start`/`end` |
+
+All routes except `/health` require an `X-API-Key` header matching `API_KEY`
+(see `src/api/deps.py`) whenever `ENV != local`. List endpoints support
+`limit`/`offset` and return the total row count in an `X-Total-Count` header,
+and are cached in Redis for a short TTL (fails open if Redis is unreachable).
 
 ## Setup
 
@@ -29,6 +52,7 @@ gold_load`, wrapped in an `ingestion_runs` row for observability. See
 uv sync
 cp .env.example .env   # fill in DATABASE_URL, BUCKET_ID, API keys
 uv run alembic upgrade head
+uv run uvicorn src.main:app --reload
 ```
 
 Required env vars (see `src/core/config.py` for the full list):
@@ -37,6 +61,11 @@ Required env vars (see `src/core/config.py` for the full list):
 - `BUCKET_ID` — S3 bucket for Bronze/Silver
 - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` — S3 credentials
 - `FRED_API_KEY`, `OPENFIGI_API_KEY` — provider API keys
+- `API_KEY` — required once `ENV != local` (the API fails closed without it)
+- `REDIS_URL` — optional, enables response caching
+
+`docker compose up` builds and runs the API (`backend`), Redis, and the full
+Airflow stack; migrations run automatically on container start.
 
 ## Running a pipeline
 
@@ -46,9 +75,9 @@ uv run python -m src.orchestration.pipelines.backfill_prices --symbols AAPL,MSFT
 uv run python -m src.orchestration.pipelines.run_register_ticker AAPL
 ```
 
-Airflow DAGs (`airflow/dags/`) run `run_prices_pipeline()` /
-`run_macro_pipeline()` daily against every ticker/series flagged
-`is_active` + `is_scheduled` in `universal_instruments` / `FRED_COLUMN_SERIES`.
+Airflow DAGs (`airflow/dags/`) run the scheduled pipelines against every
+ticker/series flagged `is_active` + `is_scheduled` in `universal_instruments`
+(prices/fundamentals/figi) or `FRED_COLUMN_SERIES` (macro).
 
 ## Tests
 
@@ -58,6 +87,5 @@ uv run pytest tests/unit
 
 ## Not yet built
 
-- A FastAPI layer to serve the Gold tables to a frontend (`src/main.py` is
-  currently an empty app).
 - Using `instrument_figi` to reconcile the same instrument across Yahoo/SEC/FRED.
+- Integration tests against a real Postgres (current tests mock the DB layer).

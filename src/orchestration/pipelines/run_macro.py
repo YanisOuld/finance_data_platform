@@ -18,6 +18,7 @@ from src.data.crud.ingestion_watermark import get_last_ts, upsert_watermark
 from src.ingestion.clients.fred_client import ingest_fred_to_bronze
 from src.transformers.gold.writers.fetch_silver import fetch_parquet_from_silver
 from src.transformers.gold.writers.write_gold_macro import write_gold_macro
+from src.transformers.quality.checks import check_macro_series
 from src.transformers.silver.clean_fred import clean_bronze_fred, normalize_fred
 from src.transformers.silver.fetch_bronze import fetch_json_from_bronze
 from src.transformers.silver.write_silver import create_silver_key, store_to_s3
@@ -85,6 +86,10 @@ def run_macro_pipeline(series: str, start: str | None = None, end: str | None = 
                     notes="no observations returned",
                 )
             return 0
+
+        report = check_macro_series(df_silver)
+        for warning in report.warnings:
+            logger.warning(warning)
 
         silver_key = create_silver_key(type=series.replace("/", "-"), dt=resolved_start, vendor="fred")
         silver_path = store_to_s3(bucket=bucket, df=df_silver, s3_key=silver_key)

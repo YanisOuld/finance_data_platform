@@ -60,6 +60,15 @@ class Settings(BaseSettings):
     # require_api_key's docstring for the fail-open/fail-closed rationale.
     api_key: str | None = Field(default=None, validation_alias=AliasChoices("API_KEY"))
 
+    # Comma-separated allowed origins for CORS, e.g. "https://app.example.com,
+    # http://localhost:5173". "*" (default) allows any origin -- fine while no
+    # frontend exists yet, but narrow this down once one does.
+    cors_origins: str = Field(default="*", validation_alias=AliasChoices("CORS_ORIGINS"))
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
     @field_validator("database_url")
     @classmethod
     def _validate_database_url(cls, v: str) -> str:

@@ -1,4 +1,7 @@
+from datetime import date
+
 import sqlalchemy as sa
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -28,3 +31,32 @@ def upsert_macro_series(session: Session, rows: list[dict]) -> int:
 
     result = session.execute(stmt)
     return result.rowcount or 0
+
+
+def get_macro_series(
+    session: Session,
+    series: str,
+    *,
+    start: date | None = None,
+    end: date | None = None,
+    limit: int = 500,
+    offset: int = 0,
+) -> list[MacroSeries]:
+    stmt = select(MacroSeries).where(MacroSeries.series == series.lower())
+    if start is not None:
+        stmt = stmt.where(MacroSeries.ts >= start)
+    if end is not None:
+        stmt = stmt.where(MacroSeries.ts <= end)
+    stmt = stmt.order_by(MacroSeries.ts.asc()).offset(offset).limit(limit)
+    return list(session.execute(stmt).scalars().all())
+
+
+def count_macro_series(
+    session: Session, series: str, *, start: date | None = None, end: date | None = None
+) -> int:
+    stmt = select(sa.func.count()).select_from(MacroSeries).where(MacroSeries.series == series.lower())
+    if start is not None:
+        stmt = stmt.where(MacroSeries.ts >= start)
+    if end is not None:
+        stmt = stmt.where(MacroSeries.ts <= end)
+    return session.execute(stmt).scalar_one()
