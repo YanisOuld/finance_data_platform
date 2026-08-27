@@ -20,7 +20,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 _CACHE_TTL_SECONDS = 300  # macro series refresh weekly at most (see run_macro.py)
 
 
-@router.get("/{series}", response_model=list[MacroSeriesResponse])
+@router.get("/{series:path}", response_model=list[MacroSeriesResponse])
 def get_macro_series_route(
     series: str,
     db: DbSession,

@@ -46,14 +46,37 @@ All routes except `/health` require an `X-API-Key` header matching `API_KEY`
 `limit`/`offset` and return the total row count in an `X-Total-Count` header,
 and are cached in Redis for a short TTL (fails open if Redis is unreachable).
 
+## Internal UI
+
+A React + Vite app (`frontend/`) served at `/app` — add/toggle tickers and
+browse prices/fundamentals/macro/FIGI tables. It's same-origin with the API
+(no CORS involved) and reads an API key from a browser field if one is
+configured. Meant as an internal admin tool, not a public-facing app — the
+key is visible in the page's JS if you set one.
+
+```bash
+cd frontend
+npm install
+npm run dev        # dev server on :5173, proxies API calls to :8000
+npm run build       # -> frontend/dist, served by FastAPI at /app
+```
+
+`src/main.py` mounts `frontend/dist` as static files; the API still boots
+(with a logged warning) if the frontend hasn't been built. The Dockerfile
+builds it automatically in a Node stage before the Python image — no Node
+needed at runtime.
+
 ## Setup
 
 ```bash
 uv sync
 cp .env.example .env   # fill in DATABASE_URL, BUCKET_ID, API keys
 uv run alembic upgrade head
+cd frontend && npm install && npm run build && cd ..
 uv run uvicorn src.main:app --reload
 ```
+
+Then open http://localhost:8000/app/ for the internal UI, or http://localhost:8000/docs for the API's interactive docs.
 
 Required env vars (see `src/core/config.py` for the full list):
 

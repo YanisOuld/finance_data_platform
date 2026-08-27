@@ -2,12 +2,20 @@
 
 ```
 src/
+  api/                      FastAPI layer, serves the Gold tables
+    schemas.py                 Pydantic request/response models
+    deps.py                     require_api_key() -- X-API-Key auth
+    routes/                    instruments.py, prices.py, fundamentals.py,
+                                macro.py, health.py
+
   core/                     shared utilities
     config.py                 Settings (env vars), single source of truth
     database.py                SQLAlchemy engine/session/Base
     logger.py                   structured logging (level, timestamp, module)
     constants.py                 DEFAULT_BACKFILL_START, FRED_COLUMN_SERIES
     bucket_utils.py                S3 client factory
+    cache.py                       fail-open Redis cache for GET routes
+    retry.py                        call_with_backoff(): shared exponential backoff
 
   ingestion/                fetch external data, write Bronze
     clients/
@@ -40,6 +48,16 @@ src/
 alembic/versions/         one migration per table, linear history
 airflow/dags/             daily DAGs calling the pipelines above
 tests/unit/               one test file per silver transform / pipeline helper
+
+frontend/                 React + Vite internal admin UI, served at /app
+  src/
+    api.js                  fetch() helper, X-API-Key header, FRED_SERIES list
+    App.jsx                  top-level state (apiKey, instruments) + layout
+    components/             Header, InstrumentsSection, TickerDetailSection
+                             (+ its Prices/Fundamentals/Figi tabs), MacroSection
+  dist/                    `npm run build` output -- what src/main.py serves
+                            (gitignored; built fresh by the Dockerfile's
+                            Node stage, or manually for local dev)
 ```
 
 ## Postgres tables (Gold)

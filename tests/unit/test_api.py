@@ -302,6 +302,24 @@ def test_get_macro_series_rejects_unknown_series(client):
     assert resp.status_code == 404
 
 
+def test_get_macro_series_accepts_slash_containing_series(monkeypatch, client):
+    """Regression: {series} used to be a plain path param, which Starlette
+    never matches across a "/" -- routes like /macro/usd/cad (a real
+    FRED_COLUMN_SERIES key) 404'd even though the series is valid. Fixed via
+    {series:path}.
+    """
+    row = _FakeInstrument(series="usd/cad", ts=date(2026, 1, 1), value=1.35)
+    monkeypatch.setattr(
+        macro_router, "get_macro_series", lambda db, series, start=None, end=None, limit=500, offset=0: [row]
+    )
+    monkeypatch.setattr(macro_router, "count_macro_series", lambda db, series, start=None, end=None: 1)
+
+    resp = client.get("/macro/usd/cad")
+
+    assert resp.status_code == 200
+    assert resp.json()[0]["series"] == "usd/cad"
+
+
 def test_get_macro_series_returns_rows(monkeypatch, client):
     row = _FakeInstrument(series="cpi", ts=date(2026, 1, 1), value=3.1)
     monkeypatch.setattr(
