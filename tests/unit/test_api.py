@@ -178,7 +178,9 @@ def test_get_prices_returns_rows(monkeypatch, client):
         close_returns=0.01,
     )
     monkeypatch.setattr(
-        prices_router, "get_prices", lambda db, ticker, start=None, end=None, limit=500, offset=0: [row]
+        prices_router,
+        "get_prices",
+        lambda db, ticker, start=None, end=None, limit=500, offset=0, sort_by="ts", order="desc": [row],
     )
     monkeypatch.setattr(prices_router, "count_prices", lambda db, ticker, start=None, end=None: 1)
 
@@ -223,9 +225,21 @@ def test_get_fundamentals_returns_rows(monkeypatch, client):
     monkeypatch.setattr(
         fundamentals_router,
         "get_fundamentals",
-        lambda db, ticker, concept=None, limit=500, offset=0: [row],
+        lambda db,
+        ticker,
+        concept=None,
+        concepts=None,
+        form=None,
+        limit=500,
+        offset=0,
+        sort_by="period_end",
+        order="desc": [row],
     )
-    monkeypatch.setattr(fundamentals_router, "count_fundamentals", lambda db, ticker, concept=None: 1)
+    monkeypatch.setattr(
+        fundamentals_router,
+        "count_fundamentals",
+        lambda db, ticker, concept=None, concepts=None, form=None: 1,
+    )
 
     resp = client.get("/fundamentals/SOFI")
 

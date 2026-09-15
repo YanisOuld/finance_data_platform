@@ -23,12 +23,19 @@ silver step.
 """
 
 
-HEADERS = {
-    "Content-Type": "application/json",
-    "X-OPENFIGI-APIKEY": settings.openfigi_api_key or "",
-}
-
 BASE_URL = "https://api.openfigi.com/v3/mapping"
+
+
+def _build_headers() -> dict:
+    """Built per-call (not at import) so the API key is read from live settings.
+    The X-OPENFIGI-APIKEY header is omitted entirely when no key is set --
+    sending an empty one pins us to the stricter anonymous quota with no
+    benefit, and OpenFIGI treats a present-but-empty key inconsistently.
+    """
+    headers = {"Content-Type": "application/json"}
+    if settings.openfigi_api_key:
+        headers["X-OPENFIGI-APIKEY"] = settings.openfigi_api_key
+    return headers
 
 
 def _create_job(ticker: str) -> dict:
@@ -38,9 +45,12 @@ def _create_job(ticker: str) -> dict:
 
 def fetch_map(symbol: str) -> dict:
     job = _create_job(symbol)
+    headers = _build_headers()
 
     def _do_request() -> dict:
-        res = requests.post(BASE_URL, headers=HEADERS, json=[job], timeout=30)
+        res = requests.post(BASE_URL, headers=headers, json=[job], timeout=30)
+        # 429 (rate limit) raises HTTPError -> RequestException -> retried by
+        # call_with_backoff, honoring OpenFIGI's Retry-After header.
         res.raise_for_status()
         return res.json()
 

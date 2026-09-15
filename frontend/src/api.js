@@ -15,6 +15,24 @@ export async function api(path, apiKey, options = {}) {
   return body;
 }
 
+export async function apiWithTotal(path, apiKey, options = {}) {
+  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+  if (apiKey) headers["X-API-Key"] = apiKey;
+  const res = await fetch(path, { ...options, headers });
+  let body = null;
+  try {
+    body = await res.json();
+  } catch (_) {
+    /* empty body */
+  }
+  if (!res.ok) {
+    const detail = body && body.detail ? JSON.stringify(body.detail) : res.statusText;
+    throw new Error(`${res.status}: ${detail}`);
+  }
+  const total = Number(res.headers.get("X-Total-Count"));
+  return { data: body, total: Number.isFinite(total) ? total : (body ? body.length : 0) };
+}
+
 export function fmtNum(v, digits = 2) {
   return v === null || v === undefined ? "" : Number(v).toFixed(digits);
 }

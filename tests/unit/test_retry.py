@@ -42,6 +42,32 @@ def test_call_with_backoff_raises_after_exhausting_retries(monkeypatch):
         call_with_backoff(fn, max_retries=2, base_delay=0, retry_on=(ValueError,))
 
 
+def test_call_with_backoff_honors_retry_after_header(monkeypatch):
+    """A 429/503 carrying Retry-After should make us sleep exactly that long
+    (capped at max_delay), not the exponential-backoff amount."""
+    slept: list[float] = []
+    monkeypatch.setattr("src.core.retry.time.sleep", lambda s: slept.append(s))
+
+    class _Resp:
+        headers = {"Retry-After": "7"}
+
+    class _HttpError(Exception):
+        response = _Resp()
+
+    attempts = {"count": 0}
+
+    def fn():
+        attempts["count"] += 1
+        if attempts["count"] < 2:
+            raise _HttpError("rate limited")
+        return "ok"
+
+    result = call_with_backoff(fn, max_retries=5, base_delay=1.0, max_delay=60.0, retry_on=(_HttpError,))
+
+    assert result == "ok"
+    assert slept == [7.0]
+
+
 def test_call_with_backoff_does_not_retry_unmatched_exceptions(monkeypatch):
     monkeypatch.setattr("src.core.retry.time.sleep", lambda _seconds: None)
     calls = []

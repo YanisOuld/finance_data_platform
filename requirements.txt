@@ -27,7 +27,11 @@ black==24.3.0
 ruff==0.3.4
 pre-commit==3.7.0
 
-yfinance==0.2.37
+# 0.2.37 (early 2024) broke against Yahoo's cookie/crumb + browser-impersonation
+# requirements -- .info / .download started returning empty bodies
+# ("Expecting value: line 1 column 1"). 0.2.66 bundles the curl_cffi-based
+# fix. Keep on the 0.2.x line the code was written against (1.x has API changes).
+yfinance==0.2.66
 
 boto3==1.34.69
 

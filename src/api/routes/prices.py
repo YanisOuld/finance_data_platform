@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
@@ -29,9 +29,11 @@ def get_prices_route(
     end: date | None = None,
     limit: int = Query(default=500, le=5000),
     offset: int = Query(default=0, ge=0),
+    sort_by: Literal["ts", "open", "high", "low", "close", "volume", "close_returns"] = "ts",
+    order: Literal["asc", "desc"] = "desc",
 ):
     ticker = ticker.upper()
-    cache_key = f"prices:{ticker}:{start}:{end}:{limit}:{offset}"
+    cache_key = f"prices:{ticker}:{start}:{end}:{limit}:{offset}:{sort_by}:{order}"
 
     cached = cache_get_json(cache_key)
     if cached is not None:
@@ -42,7 +44,9 @@ def get_prices_route(
     if get_instrument(db, ticker) is None:
         raise HTTPException(status_code=404, detail=f"'{ticker}' is not registered")
 
-    rows = get_prices(db, ticker, start=start, end=end, limit=limit, offset=offset)
+    rows = get_prices(
+        db, ticker, start=start, end=end, limit=limit, offset=offset, sort_by=sort_by, order=order
+    )
     total = count_prices(db, ticker, start=start, end=end)
 
     payload = [PriceResponse.model_validate(r).model_dump(mode="json") for r in rows]

@@ -14,10 +14,19 @@ logger = get_logger(__name__)
 
 
 def normalize_info(info: dict):
+    # Yahoo dropped the flat "timezone" key from .info (yfinance >= ~0.2.5x);
+    # the IANA zone now comes through as "exchangeTimezoneName"
+    # (e.g. "America/New_York" for NASDAQ, "America/Toronto" for TSX/CAD names).
+    # Fall back to it so registration works across markets; raise KeyError
+    # (which the caller turns into a clean 422) only if neither is present.
+    timezone = info.get("timezone") or info.get("exchangeTimezoneName")
+    if not timezone:
+        raise KeyError("timezone")
+
     res = {
         "exchange": info["exchange"],
         "quote_type": info["quoteType"],
-        "timezone": info["timezone"],
+        "timezone": timezone,
         "currency": info["currency"],
     }
     return res

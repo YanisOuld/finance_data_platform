@@ -7,9 +7,13 @@ import pendulum
 from airflow import DAG
 from airflow.decorators import task
 from airflow.models.param import Param
-from src.core.constants import FRED_COLUMN_SERIES
 
 TZ = pendulum.timezone("America/Montreal")
+
+# The project's pipeline code needs SQLAlchemy 2.0, incompatible with Airflow's
+# own 1.4 -- so it runs in this isolated interpreter (built in airflow/Dockerfile)
+# via ExternalPythonOperator, never in the scheduler/worker interpreter itself.
+PIPELINE_PYTHON = "/opt/pipeline-venv/bin/python"
 
 default_args = {
     "owner": "data-pipeline",
@@ -37,18 +41,32 @@ with DAG(
     },
 ) as dag:
 
-    @task
-    def get_series_list(**context) -> list:
-        override = (context["params"].get("series_override") or "").strip()
-        if override:
+    @task.external_python(python=PIPELINE_PYTHON, expect_airflow=False)
+    def get_series_list(override: str) -> list:
+        # Runs in the pipeline venv. `override` is a rendered template string:
+        # None renders as "None", an unset param as "", both meaning "run every
+        # known series".
+        import sys
+
+        sys.path.insert(0, "/opt/project")
+
+        override = (override or "").strip()
+        if override and override.lower() != "none":
             return [s.strip().lower() for s in override.split(",") if s.strip()]
+
+        from src.core.constants import FRED_COLUMN_SERIES
+
         return sorted(FRED_COLUMN_SERIES.keys())
 
-    @task
+    @task.external_python(python=PIPELINE_PYTHON, expect_airflow=False)
     def run_series(series: str) -> int:
+        import sys
+
+        sys.path.insert(0, "/opt/project")
+
         from src.orchestration.pipelines.run_macro import run_macro_pipeline
 
         return run_macro_pipeline(series)
 
-    series_list = get_series_list()
+    series_list = get_series_list(override="{{ params.series_override }}")
     run_series.expand(series=series_list)

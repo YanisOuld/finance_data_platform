@@ -48,6 +48,13 @@ class Settings(BaseSettings):
         default="ca-central-1", validation_alias=AliasChoices("AWS_REGION", "AWS_DEFAULT_REGION")
     )
 
+    # Custom S3 endpoint for a non-AWS, S3-compatible store (e.g. MinIO in the
+    # fully-local docker-compose.local.yml stack). Left unset in prod so boto3
+    # talks to real AWS S3; when set, get_s3_client() routes every call here.
+    s3_endpoint_url: str | None = Field(
+        default=None, validation_alias=AliasChoices("S3_ENDPOINT_URL", "AWS_ENDPOINT_URL")
+    )
+
     fred_api_key: str | None = Field(default=None, validation_alias=AliasChoices("FRED_API_KEY"))
     openfigi_api_key: str | None = Field(default=None, validation_alias=AliasChoices("OPENFIGI_API_KEY"))
 

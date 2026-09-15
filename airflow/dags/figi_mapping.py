@@ -10,6 +10,11 @@ from airflow.models.param import Param
 
 TZ = pendulum.timezone("America/Montreal")
 
+# The project's pipeline code needs SQLAlchemy 2.0, incompatible with Airflow's
+# own 1.4 -- so it runs in this isolated interpreter (built in airflow/Dockerfile)
+# via ExternalPythonOperator, never in the scheduler/worker interpreter itself.
+PIPELINE_PYTHON = "/opt/pipeline-venv/bin/python"
+
 default_args = {
     "owner": "data-pipeline",
     "retries": 2,
@@ -36,10 +41,17 @@ with DAG(
     },
 ) as dag:
 
-    @task
-    def get_tickers(**context) -> list:
-        override = (context["params"].get("tickers_override") or "").strip()
-        if override:
+    @task.external_python(python=PIPELINE_PYTHON, expect_airflow=False)
+    def get_tickers(override: str) -> list:
+        # Runs in the pipeline venv. `override` is a rendered template string:
+        # None renders as "None", an unset param as "", both meaning "use the
+        # scheduled universe from the DB".
+        import sys
+
+        sys.path.insert(0, "/opt/project")
+
+        override = (override or "").strip()
+        if override and override.lower() != "none":
             return [s.strip().upper() for s in override.split(",") if s.strip()]
 
         from src.core.database import SessionLocal
@@ -48,11 +60,15 @@ with DAG(
         with SessionLocal() as session:
             return get_scheduled_universe(session)
 
-    @task
+    @task.external_python(python=PIPELINE_PYTHON, expect_airflow=False)
     def run_ticker(ticker: str) -> int:
+        import sys
+
+        sys.path.insert(0, "/opt/project")
+
         from src.orchestration.pipelines.run_map_figi import run_map_figi_pipeline
 
         return run_map_figi_pipeline(ticker)
 
-    tickers = get_tickers()
+    tickers = get_tickers(override="{{ params.tickers_override }}")
     run_ticker.expand(ticker=tickers)

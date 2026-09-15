@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import PricesTab from "./PricesTab.jsx";
 import FundamentalsTab from "./FundamentalsTab.jsx";
-import FigiTab from "./FigiTab.jsx";
 
 const TABS = [
   { key: "prices", label: "Prices" },
   { key: "fundamentals", label: "Fundamentals" },
-  { key: "figi", label: "FIGI mapping" },
 ];
 
 export default function TickerDetailSection({ apiKey, instruments }) {
@@ -39,7 +37,6 @@ export default function TickerDetailSection({ apiKey, instruments }) {
       </div>
       {tab === "prices" && <PricesTab apiKey={apiKey} ticker={ticker} />}
       {tab === "fundamentals" && <FundamentalsTab apiKey={apiKey} ticker={ticker} />}
-      {tab === "figi" && <FigiTab apiKey={apiKey} ticker={ticker} />}
     </section>
   );
 }

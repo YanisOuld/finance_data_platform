@@ -34,6 +34,12 @@ HEADERS = {
 def _get_json(url: str) -> dict:
     def _do_request() -> dict:
         r = requests.get(url, headers=HEADERS, timeout=30)
+        # A 404 means this CIK/ticker simply has no data at that endpoint (e.g.
+        # a foreign issuer or ETF with no XBRL companyfacts) -- retrying can't
+        # fix that, so raise a non-retryable ValueError instead of burning all
+        # the backoff attempts on a permanent condition.
+        if r.status_code == 404:
+            raise ValueError(f"SEC EDGAR returned 404 (no data) for {url}")
         r.raise_for_status()
         return r.json()
 

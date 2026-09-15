@@ -43,18 +43,71 @@ def upsert_fundamentals(session: Session, rows: list[dict]) -> int:
     return result.rowcount or 0
 
 
-def get_fundamentals(
-    session: Session, ticker: str, *, concept: str | None = None, limit: int = 500, offset: int = 0
-) -> list[Fundamental]:
-    stmt = select(Fundamental).where(Fundamental.ticker == ticker.upper())
+# Columns the API is allowed to sort by (keyed by the client-facing string so an
+# arbitrary value can never reach the ORM). Unknown keys fall back to period_end.
+SORTABLE_COLUMNS = {
+    "period_end": Fundamental.period_end,
+    "concept": Fundamental.concept,
+    "val": Fundamental.val,
+    "fy": Fundamental.fy,
+    "form": Fundamental.form,
+    "fp": Fundamental.fp,
+}
+
+
+def _apply_filters(stmt, ticker, concept, concepts, form):
+    stmt = stmt.where(Fundamental.ticker == ticker.upper())
     if concept is not None:
         stmt = stmt.where(Fundamental.concept == concept)
-    stmt = stmt.order_by(Fundamental.period_end.desc()).offset(offset).limit(limit)
+    if concepts:
+        stmt = stmt.where(Fundamental.concept.in_(concepts))
+    if form is not None:
+        stmt = stmt.where(Fundamental.form == form)
+    return stmt
+
+
+def get_fundamentals(
+    session: Session,
+    ticker: str,
+    *,
+    concept: str | None = None,
+    concepts: list[str] | None = None,
+    form: str | None = None,
+    limit: int = 500,
+    offset: int = 0,
+    sort_by: str = "period_end",
+    order: str = "desc",
+) -> list[Fundamental]:
+    stmt = _apply_filters(select(Fundamental), ticker, concept, concepts, form)
+
+    col = SORTABLE_COLUMNS.get(sort_by, Fundamental.period_end)
+    col = col.desc() if order == "desc" else col.asc()
+    # Secondary key on concept keeps pagination stable when many rows share the
+    # primary sort value (e.g. dozens of concepts with the same period_end).
+    stmt = stmt.order_by(col, Fundamental.concept.asc()).offset(offset).limit(limit)
     return list(session.execute(stmt).scalars().all())
 
 
-def count_fundamentals(session: Session, ticker: str, *, concept: str | None = None) -> int:
-    stmt = select(sa.func.count()).select_from(Fundamental).where(Fundamental.ticker == ticker.upper())
-    if concept is not None:
-        stmt = stmt.where(Fundamental.concept == concept)
+def count_fundamentals(
+    session: Session,
+    ticker: str,
+    *,
+    concept: str | None = None,
+    concepts: list[str] | None = None,
+    form: str | None = None,
+) -> int:
+    stmt = _apply_filters(select(sa.func.count()).select_from(Fundamental), ticker, concept, concepts, form)
     return session.execute(stmt).scalar_one()
+
+
+def list_concepts(session: Session, ticker: str) -> list[str]:
+    """Distinct XBRL concept tags on file for a ticker -- powers the explorer's
+    concept autocomplete so the user picks from what actually exists instead of
+    guessing exact us-gaap:/dei: tag names."""
+    stmt = (
+        select(Fundamental.concept)
+        .where(Fundamental.ticker == ticker.upper())
+        .distinct()
+        .order_by(Fundamental.concept.asc())
+    )
+    return list(session.execute(stmt).scalars().all())
