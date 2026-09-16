@@ -1,3 +1,4 @@
+from .api_key import ApiKey
 from .ingestion_run import IngestionRun
 from .ingestion_watermark import IngestionWatermark
 from .macro_series import MacroSeries
@@ -10,4 +11,5 @@ __all__ = [
     "IngestionWatermark",
     "MacroSeries",
     "IngestionRun",
+    "ApiKey",
 ]

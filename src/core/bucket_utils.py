@@ -18,9 +18,7 @@ def get_s3_client():
         "aws_secret_access_key": settings.aws_secret_access_key,
         "region_name": settings.aws_region,
     }
-    # When pointed at an S3-compatible store like MinIO (local stack), we must
-    # also force path-style addressing -- MinIO doesn't do the
-    # <bucket>.<host> virtual-hosted style AWS uses by default.
+    # MinIO (and most S3-compatible stores) need path-style addressing.
     if settings.s3_endpoint_url:
         kwargs["endpoint_url"] = settings.s3_endpoint_url
         kwargs["config"] = boto3.session.Config(s3={"addressing_style": "path"})

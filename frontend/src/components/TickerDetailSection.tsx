@@ -1,13 +1,19 @@
 import { useEffect, useState } from "react";
-import PricesTab from "./PricesTab.jsx";
-import FundamentalsTab from "./FundamentalsTab.jsx";
+import PricesTab from "./PricesTab";
+import FundamentalsTab from "./FundamentalsTab";
+import type { Instrument } from "../types";
+
+interface TickerDetailSectionProps {
+  apiKey: string;
+  instruments: Instrument[];
+}
 
 const TABS = [
   { key: "prices", label: "Prices" },
   { key: "fundamentals", label: "Fundamentals" },
 ];
 
-export default function TickerDetailSection({ apiKey, instruments }) {
+export default function TickerDetailSection({ apiKey, instruments }: TickerDetailSectionProps) {
   const [ticker, setTicker] = useState("");
   const [tab, setTab] = useState("prices");
 

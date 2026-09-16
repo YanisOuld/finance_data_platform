@@ -1,3 +1,4 @@
+import sqlalchemy as sa
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,19 +20,46 @@ def get_instrument(session: Session, ticker: str) -> UniversalInstrument | None:
     return session.execute(stmt).scalar_one_or_none()
 
 
+def _instruments_filter(stmt, is_active: bool | None, is_scheduled: bool | None):
+    if is_active is not None:
+        stmt = stmt.where(UniversalInstrument.is_active == is_active)
+    if is_scheduled is not None:
+        stmt = stmt.where(UniversalInstrument.is_scheduled == is_scheduled)
+    return stmt
+
+
 def list_instruments(
     session: Session,
     *,
     is_active: bool | None = None,
     is_scheduled: bool | None = None,
+    limit: int | None = None,
+    offset: int = 0,
 ) -> list[UniversalInstrument]:
-    stmt = select(UniversalInstrument)
-    if is_active is not None:
-        stmt = stmt.where(UniversalInstrument.is_active == is_active)
-    if is_scheduled is not None:
-        stmt = stmt.where(UniversalInstrument.is_scheduled == is_scheduled)
+    """List the instrument universe, ordered by ticker.
+
+    `limit=None` returns every matching row (the historical behaviour, fine
+    while the universe is small); pass a limit to page through it once it grows.
+    """
+    stmt = _instruments_filter(select(UniversalInstrument), is_active, is_scheduled)
     stmt = stmt.order_by(UniversalInstrument.ticker)
+    if offset:
+        stmt = stmt.offset(offset)
+    if limit is not None:
+        stmt = stmt.limit(limit)
     return list(session.execute(stmt).scalars().all())
+
+
+def count_instruments(
+    session: Session,
+    *,
+    is_active: bool | None = None,
+    is_scheduled: bool | None = None,
+) -> int:
+    stmt = _instruments_filter(
+        select(sa.func.count()).select_from(UniversalInstrument), is_active, is_scheduled
+    )
+    return session.execute(stmt).scalar_one()
 
 
 def get_or_create_instrument(

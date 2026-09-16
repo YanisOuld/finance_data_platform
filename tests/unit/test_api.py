@@ -57,12 +57,18 @@ def client():
 
 def test_list_instruments(monkeypatch, client):
     monkeypatch.setattr(
-        instruments_router, "list_instruments", lambda db, is_active=None, is_scheduled=None: [_instrument()]
+        instruments_router,
+        "list_instruments",
+        lambda db, is_active=None, is_scheduled=None, limit=None, offset=0: [_instrument()],
+    )
+    monkeypatch.setattr(
+        instruments_router, "count_instruments", lambda db, is_active=None, is_scheduled=None: 1
     )
 
     resp = client.get("/instruments")
 
     assert resp.status_code == 200
+    assert resp.headers["X-Total-Count"] == "1"
     assert resp.json() == [
         {
             "id": 1,
@@ -115,14 +121,61 @@ def test_create_instrument_returns_202_and_schedules_backfill(monkeypatch, clien
         "register_ticker",
         lambda ticker, **kwargs: called_with.update(ticker=ticker, **kwargs),
     )
+    fundamentals_called = {}
+    monkeypatch.setattr(
+        instruments_router,
+        "run_fundamentals_pipeline",
+        lambda ticker: fundamentals_called.update(ticker=ticker),
+    )
 
     resp = client.post("/instruments", json={"ticker": "sofi"})
 
     assert resp.status_code == 202
     assert resp.json()["ticker"] == "sofi"
-    # the background task itself only runs after the response is sent in a
-    # real server; TestClient runs it inline, so we can assert it was invoked.
+    # the background tasks themselves only run after the response is sent in a
+    # real server; TestClient runs them inline, so we can assert they fired.
+    # Airflow is unconfigured in tests, so both backfills take the in-process path.
     assert called_with["ticker"] == "sofi"
+    assert fundamentals_called["ticker"] == "SOFI"
+
+
+def test_create_instrument_triggers_airflow_dag_and_skips_in_process(monkeypatch, client):
+    monkeypatch.setattr(
+        instruments_router,
+        "validate_and_upsert_ticker",
+        lambda ticker, is_scheduled=True: {
+            "id": 1,
+            "ticker": ticker,
+            "name": "SoFi Technologies",
+            "exchange": "NMS",
+            "currency": "USD",
+            "timezone": "America/New_York",
+            "is_active": True,
+            "is_scheduled": is_scheduled,
+        },
+    )
+    triggers = []
+    monkeypatch.setattr(
+        instruments_router,
+        "trigger_dag_run",
+        lambda dag_id, conf: triggers.append((dag_id, conf)) or True,
+    )
+    # If Airflow accepts both runs, neither in-process fallback must fire.
+    called = {"register": False, "fundamentals": False}
+    monkeypatch.setattr(instruments_router, "register_ticker", lambda *a, **k: called.update(register=True))
+    monkeypatch.setattr(
+        instruments_router, "run_fundamentals_pipeline", lambda *a, **k: called.update(fundamentals=True)
+    )
+
+    resp = client.post("/instruments", json={"ticker": "sofi", "backfill_start": "2020-01-01"})
+
+    assert resp.status_code == 202
+    by_dag = {dag_id: conf for dag_id, conf in triggers}
+    assert by_dag["yf_prices_1d_daily"]["symbols_override"] == "SOFI"
+    assert by_dag["yf_prices_1d_daily"]["start_dt"] == "2020-01-01"
+    assert by_dag["sec_fundamentals_weekly"]["tickers_override"] == "SOFI"
+    assert called["register"] is False
+    assert called["fundamentals"] is False
 
 
 def test_create_instrument_rejects_invalid_ticker(monkeypatch, client):
@@ -271,7 +324,12 @@ def test_instruments_route_enforces_api_key_when_configured(monkeypatch, client)
     monkeypatch.setattr(deps.settings, "environment", "prod")
     monkeypatch.setattr(deps.settings, "api_key", "secret123")
     monkeypatch.setattr(
-        instruments_router, "list_instruments", lambda db, is_active=None, is_scheduled=None: []
+        instruments_router,
+        "list_instruments",
+        lambda db, is_active=None, is_scheduled=None, limit=None, offset=0: [],
+    )
+    monkeypatch.setattr(
+        instruments_router, "count_instruments", lambda db, is_active=None, is_scheduled=None: 0
     )
 
     resp_no_key = client.get("/instruments")
@@ -324,7 +382,9 @@ def test_get_macro_series_accepts_slash_containing_series(monkeypatch, client):
     """
     row = _FakeInstrument(series="usd/cad", ts=date(2026, 1, 1), value=1.35)
     monkeypatch.setattr(
-        macro_router, "get_macro_series", lambda db, series, start=None, end=None, limit=500, offset=0: [row]
+        macro_router,
+        "get_macro_series",
+        lambda db, series, start=None, end=None, limit=500, offset=0, order="asc": [row],
     )
     monkeypatch.setattr(macro_router, "count_macro_series", lambda db, series, start=None, end=None: 1)
 
@@ -337,7 +397,9 @@ def test_get_macro_series_accepts_slash_containing_series(monkeypatch, client):
 def test_get_macro_series_returns_rows(monkeypatch, client):
     row = _FakeInstrument(series="cpi", ts=date(2026, 1, 1), value=3.1)
     monkeypatch.setattr(
-        macro_router, "get_macro_series", lambda db, series, start=None, end=None, limit=500, offset=0: [row]
+        macro_router,
+        "get_macro_series",
+        lambda db, series, start=None, end=None, limit=500, offset=0, order="asc": [row],
     )
     monkeypatch.setattr(macro_router, "count_macro_series", lambda db, series, start=None, end=None: 1)
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -63,6 +63,29 @@ class MacroSeriesResponse(BaseModel):
     series: str
     ts: date
     value: float | None
+
+
+class ApiKeyCreate(BaseModel):
+    label: str
+
+
+class ApiKeyInfo(BaseModel):
+    """Metadata safe to list -- never includes the secret."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    label: str
+    prefix: str
+    is_active: bool
+    created_at: datetime
+    last_used_at: datetime | None
+
+
+class ApiKeyCreated(ApiKeyInfo):
+    """Returned once, at creation time, with the plaintext token."""
+
+    key: str
 
 
 class FigiResponse(BaseModel):

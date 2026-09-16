@@ -1,10 +1,4 @@
-"""
-Shared exponential backoff, factored out of the retry loop that already
-existed ad-hoc in src/ingestion/clients/yahoo_client.py (fetch_prices_1d_safe,
-fetch_info). fred_client.py, sec_edgar_client.py and openfigi_client.py each
-made a single unretried request -- one transient network blip failed the
-whole ingestion_runs row instead of just retrying.
-"""
+"""Shared exponential backoff for the ingestion HTTP clients."""
 
 from __future__ import annotations
 
@@ -21,12 +15,8 @@ T = TypeVar("T")
 
 
 def _retry_after_seconds(exc: Exception) -> float | None:
-    """If `exc` is an HTTP error carrying a Retry-After header (429/503 from
-    OpenFIGI, SEC, FRED...), return how long the server told us to wait.
-    Duck-typed on exc.response.headers so this module needs no `requests`
-    import. Handles the delta-seconds form ("120"); the HTTP-date form is
-    rare here and falls back to normal backoff.
-    """
+    """Seconds from a Retry-After header on the exception's response, if any
+    (delta-seconds form only). Duck-typed so this module needs no requests import."""
     response = getattr(exc, "response", None)
     headers = getattr(response, "headers", None)
     if not headers:
@@ -49,20 +39,15 @@ def call_with_backoff(
     retry_on: tuple[type[Exception], ...] = (Exception,),
     description: str = "call",
 ) -> T:
-    """Call fn() with exponential backoff + jitter, retrying only on
-    exceptions matching `retry_on` (e.g. requests.RequestException) so
-    non-transient errors -- a bad ticker, a malformed response -- fail
-    immediately instead of being retried pointlessly.
-    """
+    """Call fn() with exponential backoff + jitter, retrying only exceptions in
+    `retry_on` so non-transient errors fail immediately."""
     last_err: Exception | None = None
     for attempt in range(max_retries):
         try:
             return fn()
         except retry_on as e:
             last_err = e
-            # Honor an explicit Retry-After when the server sends one (capped at
-            # max_delay so a hostile/huge value can't stall the run); otherwise
-            # fall back to exponential backoff + jitter.
+            # Honor Retry-After (capped) if present, else exponential backoff.
             retry_after = _retry_after_seconds(e)
             if retry_after is not None:
                 delay = min(max_delay, retry_after)

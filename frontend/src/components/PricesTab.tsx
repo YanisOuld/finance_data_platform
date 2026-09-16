@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
-import { apiWithTotal, fmtNum } from "../api.js";
+import { apiWithTotal, errMsg, fmtNum } from "../api";
+import type { Price } from "../types";
 
-// Columns the server is allowed to sort by (must match the Literal in
-// src/api/routes/prices.py). `key` is what we send as sort_by; `num` right-
-// aligns numeric cells; `sortable=false` marks derived cells with no server
-// column (Return is computed from close_returns, which IS sortable, so it maps
-// to that key rather than being disabled).
-const COLUMNS = [
+// Sortable columns; `key` is sent as sort_by, `num` right-aligns.
+interface Column {
+  key: string;
+  label: string;
+  num?: boolean;
+}
+
+const COLUMNS: Column[] = [
   { key: "ts", label: "Date" },
   { key: "open", label: "Open", num: true },
   { key: "high", label: "High", num: true },
@@ -18,24 +21,28 @@ const COLUMNS = [
 
 const PAGE_SIZES = [25, 50, 100, 250];
 
-export default function PricesTab({ apiKey, ticker }) {
-  const [rows, setRows] = useState(null);
-  const [total, setTotal] = useState(0);
-  const [error, setError] = useState(null);
+type Order = "asc" | "desc";
 
-  // Filters / sort / pagination state.
+interface PricesTabProps {
+  apiKey: string;
+  ticker: string;
+}
+
+export default function PricesTab({ apiKey, ticker }: PricesTabProps) {
+  const [rows, setRows] = useState<Price[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [sortBy, setSortBy] = useState("ts");
-  const [order, setOrder] = useState("desc");
+  const [order, setOrder] = useState<Order>("desc");
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(0); // zero-based
 
   const offset = page * pageSize;
 
-  // Re-fetch whenever any query input changes. Every filter/sort/page lives in
-  // the URL query, so the server does the work -- sorting and paging stay
-  // consistent across the whole result set, not just the rows on screen.
+  // Server-side filter/sort/paginate so results stay consistent across pages.
   useEffect(() => {
     if (!ticker) {
       setRows([]);
@@ -54,17 +61,15 @@ export default function PricesTab({ apiKey, ticker }) {
     if (start) params.set("start", start);
     if (end) params.set("end", end);
 
-    apiWithTotal(`/prices/${ticker}?${params.toString()}`, apiKey)
+    apiWithTotal<Price[]>(`/prices/${ticker}?${params.toString()}`, apiKey)
       .then(({ data, total }) => {
         setRows(data);
         setTotal(total);
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => setError(errMsg(e)));
   }, [ticker, apiKey, start, end, sortBy, order, pageSize, offset]);
 
-  // Any filter/sort change should send us back to page 1 -- otherwise you can
-  // land on an out-of-range offset (e.g. page 5 of a now 2-page result).
-  function changeSort(key) {
+  function changeSort(key: string) {
     if (key === sortBy) {
       setOrder((o) => (o === "asc" ? "desc" : "asc"));
     } else {
@@ -74,8 +79,8 @@ export default function PricesTab({ apiKey, ticker }) {
     setPage(0);
   }
 
-  function onFilter(setter) {
-    return (e) => {
+  function onFilter(setter: (v: string) => void) {
+    return (e: React.ChangeEvent<HTMLInputElement>) => {
       setter(e.target.value);
       setPage(0);
     };
@@ -148,31 +153,24 @@ export default function PricesTab({ apiKey, ticker }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.ts}>
-                  <td>{row.ts}</td>
-                  <td style={{ textAlign: "right" }}>{fmtNum(row.open)}</td>
-                  <td style={{ textAlign: "right" }}>{fmtNum(row.high)}</td>
-                  <td style={{ textAlign: "right" }}>{fmtNum(row.low)}</td>
-                  <td style={{ textAlign: "right" }}>{fmtNum(row.close)}</td>
-                  <td style={{ textAlign: "right" }}>{row.volume ?? ""}</td>
-                  <td
-                    style={{
-                      textAlign: "right",
-                      color:
-                        row.close_returns > 0
-                          ? "var(--ok)"
-                          : row.close_returns < 0
-                          ? "var(--bad)"
-                          : undefined,
-                    }}
-                  >
-                    {row.close_returns !== null && row.close_returns !== undefined
-                      ? `${fmtNum(row.close_returns * 100, 2)}%`
-                      : ""}
-                  </td>
-                </tr>
-              ))}
+              {rows.map((row) => {
+                const ret = row.close_returns;
+                const retColor =
+                  ret != null && ret > 0 ? "var(--ok)" : ret != null && ret < 0 ? "var(--bad)" : undefined;
+                return (
+                  <tr key={row.ts}>
+                    <td>{row.ts}</td>
+                    <td style={{ textAlign: "right" }}>{fmtNum(row.open)}</td>
+                    <td style={{ textAlign: "right" }}>{fmtNum(row.high)}</td>
+                    <td style={{ textAlign: "right" }}>{fmtNum(row.low)}</td>
+                    <td style={{ textAlign: "right" }}>{fmtNum(row.close)}</td>
+                    <td style={{ textAlign: "right" }}>{row.volume ?? ""}</td>
+                    <td style={{ textAlign: "right", color: retColor }}>
+                      {ret != null ? `${fmtNum(ret * 100, 2)}%` : ""}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 
@@ -186,19 +184,27 @@ export default function PricesTab({ apiKey, ticker }) {
                 {offset + 1}-{offset + rows.length} of {total}
               </span>
               <div className="field" style={{ marginLeft: "auto", gap: 8 }}>
-                <button disabled={page === 0} onClick={() => setPage(0)}>
+                <button className="pagebtn" disabled={page === 0} onClick={() => setPage(0)}>
                   « First
                 </button>
-                <button disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+                <button className="pagebtn" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
                   ‹ Prev
                 </button>
                 <span className="muted">
                   Page {page + 1} / {totalPages}
                 </span>
-                <button disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                <button
+                  className="pagebtn"
+                  disabled={page + 1 >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
                   Next ›
                 </button>
-                <button disabled={page + 1 >= totalPages} onClick={() => setPage(totalPages - 1)}>
+                <button
+                  className="pagebtn"
+                  disabled={page + 1 >= totalPages}
+                  onClick={() => setPage(totalPages - 1)}
+                >
                   Last »
                 </button>
               </div>

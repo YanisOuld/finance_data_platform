@@ -43,8 +43,7 @@ def upsert_fundamentals(session: Session, rows: list[dict]) -> int:
     return result.rowcount or 0
 
 
-# Columns the API is allowed to sort by (keyed by the client-facing string so an
-# arbitrary value can never reach the ORM). Unknown keys fall back to period_end.
+# Sortable columns (whitelist; unknown keys fall back to period_end).
 SORTABLE_COLUMNS = {
     "period_end": Fundamental.period_end,
     "concept": Fundamental.concept,
@@ -82,8 +81,7 @@ def get_fundamentals(
 
     col = SORTABLE_COLUMNS.get(sort_by, Fundamental.period_end)
     col = col.desc() if order == "desc" else col.asc()
-    # Secondary key on concept keeps pagination stable when many rows share the
-    # primary sort value (e.g. dozens of concepts with the same period_end).
+    # Secondary key keeps pagination stable across ties.
     stmt = stmt.order_by(col, Fundamental.concept.asc()).offset(offset).limit(limit)
     return list(session.execute(stmt).scalars().all())
 
@@ -101,9 +99,7 @@ def count_fundamentals(
 
 
 def list_concepts(session: Session, ticker: str) -> list[str]:
-    """Distinct XBRL concept tags on file for a ticker -- powers the explorer's
-    concept autocomplete so the user picks from what actually exists instead of
-    guessing exact us-gaap:/dei: tag names."""
+    """Distinct concept tags on file for a ticker (powers the concept picker)."""
     stmt = (
         select(Fundamental.concept)
         .where(Fundamental.ticker == ticker.upper())

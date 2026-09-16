@@ -60,6 +60,20 @@ class Settings(BaseSettings):
 
     redis_url: str | None = Field(default=None, validation_alias=AliasChoices("REDIS_URL"))
 
+    # Airflow stable REST API, used by the instruments route to hand a new
+    # ticker's initial price backfill to Airflow (a durable executor that
+    # survives an API restart) instead of an in-process BackgroundTask. Leave
+    # unset to keep the in-process fallback. In the docker stack the base URL is
+    # the webserver, e.g. http://airflow-webserver:8080/api/v1.
+    airflow_api_url: str | None = Field(default=None, validation_alias=AliasChoices("AIRFLOW_API_URL"))
+    airflow_username: str | None = Field(default=None, validation_alias=AliasChoices("AIRFLOW_USERNAME"))
+    airflow_password: str | None = Field(default=None, validation_alias=AliasChoices("AIRFLOW_PASSWORD"))
+
+    db_pool_size: int = Field(default=5, validation_alias=AliasChoices("DB_POOL_SIZE"))
+    db_max_overflow: int = Field(default=10, validation_alias=AliasChoices("DB_MAX_OVERFLOW"))
+    db_pool_timeout: int = Field(default=30, validation_alias=AliasChoices("DB_POOL_TIMEOUT"))
+    db_pool_recycle: int = Field(default=1800, validation_alias=AliasChoices("DB_POOL_RECYCLE"))
+
     log_level: str = Field(default="INFO", validation_alias=AliasChoices("LOG_LEVEL"))
 
     # Shared secret checked by src/api/deps.py::require_api_key against the
@@ -112,4 +126,8 @@ class Settings(BaseSettings):
         return self
 
 
-settings = Settings()
+# pydantic-settings populates every field from the environment (.env / real env
+# vars) at construction time, so no arguments are passed here. Static type
+# checkers (Pyright/Pylance) don't model that and flag the no-default fields
+# (database_url, bucket_id) as "missing arguments" -- silence just that check.
+settings = Settings()  # type: ignore[call-arg]

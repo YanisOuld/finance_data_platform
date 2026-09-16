@@ -1,14 +1,16 @@
-// Human-friendly presentation for SEC XBRL concept tags.
-//
-// SEC data is raw XBRL: every fact is tagged with a technical concept like
-// "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax". This module
-// maps the important ones to readable labels and defines the curated "Key
-// financials" set. Companies don't all use the same tag for the "same" line
-// (e.g. Revenue is sometimes us-gaap:Revenues), so each metric lists candidate
-// tags in priority order and we pick whichever the company actually reports.
+// Readable labels + curated "Key financials" set for SEC XBRL concept tags.
+// Each metric lists candidate tags in priority order (companies tag the same
+// line differently) and we use whichever the company reports.
 
-// Ordered curated metrics shown in the "Key financials" summary.
-export const KEY_METRICS = [
+export type MetricKind = "money" | "perShare" | "shares";
+
+export interface KeyMetric {
+  label: string;
+  kind: MetricKind;
+  concepts: string[];
+}
+
+export const KEY_METRICS: KeyMetric[] = [
   { label: "Revenue", kind: "money", concepts: [
     "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
     "us-gaap:Revenues",
@@ -41,21 +43,17 @@ export const KEY_METRICS = [
   ] },
 ];
 
-// Every candidate tag across all key metrics -- passed to the API's `concepts`
-// filter so the whole curated view is one request.
-export const KEY_METRIC_CONCEPTS = [...new Set(KEY_METRICS.flatMap((m) => m.concepts))];
+export const KEY_METRIC_CONCEPTS: string[] = [...new Set(KEY_METRICS.flatMap((m) => m.concepts))];
 
-// Nicely space out a raw concept tag for the explorer, e.g.
-// "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax"
-// -> "Revenue From Contract With Customer Excluding Assessed Tax".
-export function prettyConcept(concept) {
+// "us-gaap:RevenueFromContract..." -> "Revenue From Contract...".
+export function prettyConcept(concept: string | null | undefined): string {
   if (!concept) return "";
   const local = concept.includes(":") ? concept.split(":").slice(1).join(":") : concept;
   return local.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
 }
 
 // Compact large monetary/share values: 109_417_000_000 -> "109.42B".
-export function fmtCompact(v, kind) {
+export function fmtCompact(v: number | string | null | undefined, kind: MetricKind): string {
   if (v === null || v === undefined) return "";
   const n = Number(v);
   if (!Number.isFinite(n)) return "";

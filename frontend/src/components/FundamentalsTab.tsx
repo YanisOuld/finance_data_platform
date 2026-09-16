@@ -1,8 +1,30 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { api, apiWithTotal } from "../api.js";
-import { KEY_METRICS, KEY_METRIC_CONCEPTS, prettyConcept, fmtCompact } from "../fundamentalsMeta.js";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type SetStateAction,
+} from "react";
+import { api, apiWithTotal, errMsg } from "../api";
+import {
+  KEY_METRICS,
+  KEY_METRIC_CONCEPTS,
+  prettyConcept,
+  fmtCompact,
+  type MetricKind,
+} from "../fundamentalsMeta";
+import type { Fundamental } from "../types";
 
-const EXPLORER_COLUMNS = [
+type Order = "asc" | "desc";
+
+interface Column {
+  key: string;
+  label: string;
+  num?: boolean;
+}
+
+const EXPLORER_COLUMNS: Column[] = [
   { key: "concept", label: "Concept" },
   { key: "period_end", label: "Period end" },
   { key: "fy", label: "FY", num: true },
@@ -11,13 +33,36 @@ const EXPLORER_COLUMNS = [
   { key: "val", label: "Value", num: true },
 ];
 
+// Truncate the long concept column with an ellipsis (full name on hover).
+const CONCEPT_CELL: CSSProperties = {
+  maxWidth: 240,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
 const PAGE_SIZES = [25, 50, 100, 250];
 
+// Keeps the metric-name column pinned while the period columns scroll sideways.
+const STICKY_COL: CSSProperties = { position: "sticky", left: 0, background: "var(--panel)", zIndex: 1 };
+
+interface TickerProps {
+  apiKey: string;
+  ticker: string;
+}
+
+interface MetricRow {
+  label: string;
+  kind: MetricKind;
+  concept: string | undefined;
+  byPeriod: Record<string, number>;
+}
+
 // ---- Curated "Key financials" -------------------------------------------------
-function KeyFinancials({ apiKey, ticker }) {
+function KeyFinancials({ apiKey, ticker }: TickerProps) {
   const [form, setForm] = useState("10-Q");
-  const [rows, setRows] = useState(null);
-  const [error, setError] = useState(null);
+  const [rows, setRows] = useState<Fundamental[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!ticker) return;
@@ -30,18 +75,19 @@ function KeyFinancials({ apiKey, ticker }) {
       sort_by: "period_end",
       order: "desc",
     });
-    api(`/fundamentals/${ticker}?${qs}`, apiKey)
+    api<Fundamental[]>(`/fundamentals/${ticker}?${qs}`, apiKey)
       .then(setRows)
-      .catch((e) => setError(e.message));
+      .catch((e) => setError(errMsg(e)));
   }, [ticker, apiKey, form]);
 
-  const { periods, metricRows } = useMemo(() => {
+  const { periods, metricRows } = useMemo<{ periods: string[]; metricRows: MetricRow[] }>(() => {
     if (!rows || rows.length === 0) return { periods: [], metricRows: [] };
-    const periods = [...new Set(rows.map((r) => r.period_end))].sort().reverse().slice(0, 5);
+    // Newest first, capped; the table scrolls horizontally to older periods.
+    const periods = [...new Set(rows.map((r) => r.period_end))].sort().reverse().slice(0, 40);
 
     const metricRows = KEY_METRICS.map((m) => {
       const concept = m.concepts.find((c) => rows.some((r) => r.concept === c));
-      const byPeriod = {};
+      const byPeriod: Record<string, number> = {};
       if (concept) {
         for (const r of rows) {
           if (r.concept === concept) byPeriod[r.period_end] = r.val;
@@ -72,49 +118,62 @@ function KeyFinancials({ apiKey, ticker }) {
         <div className="empty">No key financials for {form} filings.</div>
       )}
       {!error && metricRows.length > 0 && (
-        <div style={{ overflowX: "auto" }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Metric</th>
-                {periods.map((p) => (
-                  <th key={p} style={{ textAlign: "right" }}>
-                    {p}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {metricRows.map((m) => (
-                <tr key={m.label}>
-                  <td title={m.concept}>{m.label}</td>
+        <>
+          {periods.length > 5 && (
+            <div className="muted" style={{ marginBottom: 6, fontSize: 12 }}>
+              ↔ scroll sideways to see older periods
+            </div>
+          )}
+          <div style={{ overflowX: "auto" }}>
+            <table>
+              <thead>
+                <tr>
+                  <th style={STICKY_COL}>Metric</th>
                   {periods.map((p) => (
-                    <td key={p} style={{ textAlign: "right" }}>
-                      {fmtCompact(m.byPeriod[p], m.kind)}
-                    </td>
+                    <th key={p} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      {p}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {metricRows.map((m) => (
+                  <tr key={m.label}>
+                    <td title={m.concept} style={STICKY_COL}>
+                      {m.label}
+                    </td>
+                    {periods.map((p) => (
+                      <td key={p} style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                        {fmtCompact(m.byPeriod[p], m.kind)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </section>
   );
 }
 
-// ---- Multi-concept picker -----------------------------------------------------
-// Lets the user choose exactly which concepts to view (search + checkboxes), so
-// the explorer can show just those, grouped together. Empty selection = all.
-function ConceptPicker({ concepts, selected, setSelected }) {
+// Multi-concept picker (search + checkboxes). Empty selection = all concepts.
+interface ConceptPickerProps {
+  concepts: string[];
+  selected: string[];
+  setSelected: (updater: SetStateAction<string[]>) => void;
+}
+
+function ConceptPicker({ concepts, selected, setSelected }: ConceptPickerProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
-  const boxRef = useRef(null);
+  const boxRef = useRef<HTMLDivElement>(null);
 
   // Close when clicking outside the picker.
   useEffect(() => {
-    function onClick(e) {
-      if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false);
+    function onClick(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
     }
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
@@ -124,13 +183,13 @@ function ConceptPicker({ concepts, selected, setSelected }) {
     const needle = q.trim().toLowerCase();
     const base = needle
       ? concepts.filter(
-          (c) => c.toLowerCase().includes(needle) || prettyConcept(c).toLowerCase().includes(needle)
+          (c) => c.toLowerCase().includes(needle) || prettyConcept(c).toLowerCase().includes(needle),
         )
       : concepts;
     return base.slice(0, 300); // cap rendered rows for performance
   }, [concepts, q]);
 
-  function toggle(c) {
+  function toggle(c: string) {
     setSelected((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
   }
 
@@ -184,31 +243,30 @@ function ConceptPicker({ concepts, selected, setSelected }) {
 }
 
 // ---- Full explorer ------------------------------------------------------------
-function Explorer({ apiKey, ticker }) {
-  const [concepts, setConcepts] = useState([]);
-  const [selected, setSelected] = useState([]);
+function Explorer({ apiKey, ticker }: TickerProps) {
+  const [concepts, setConcepts] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
   const [form, setForm] = useState("");
   const [sortBy, setSortBy] = useState("period_end");
-  const [order, setOrder] = useState("desc");
+  const [order, setOrder] = useState<Order>("desc");
   const [pageSize, setPageSize] = useState(50);
   const [page, setPage] = useState(0);
-  const [rows, setRows] = useState(null);
+  const [rows, setRows] = useState<Fundamental[] | null>(null);
   const [total, setTotal] = useState(0);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
 
   const offset = page * pageSize;
 
   useEffect(() => {
     if (!ticker) return;
     setSelected([]);
-    api(`/fundamentals/${ticker}/concepts`, apiKey)
+    api<string[]>(`/fundamentals/${ticker}/concepts`, apiKey)
       .then(setConcepts)
       .catch(() => setConcepts([]));
   }, [ticker, apiKey]);
 
-  // Any concept selection change: back to page 1, and group rows by concept so
-  // the chosen concepts sit together (user can still re-sort by clicking a header).
-  function updateSelected(updater) {
+  // On selection change: reset to page 1 and group rows by concept.
+  function updateSelected(updater: SetStateAction<string[]>) {
     setSelected((prev) => {
       const next = typeof updater === "function" ? updater(prev) : updater;
       if (next.length > 0) {
@@ -235,15 +293,15 @@ function Explorer({ apiKey, ticker }) {
     });
     if (selected.length) qs.set("concepts", selected.join(","));
     if (form) qs.set("form", form);
-    apiWithTotal(`/fundamentals/${ticker}?${qs}`, apiKey)
+    apiWithTotal<Fundamental[]>(`/fundamentals/${ticker}?${qs}`, apiKey)
       .then(({ data, total }) => {
         setRows(data);
         setTotal(total);
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => setError(errMsg(e)));
   }, [ticker, apiKey, selected, form, sortBy, order, pageSize, offset]);
 
-  function changeSort(key) {
+  function changeSort(key: string) {
     if (key === sortBy) setOrder((o) => (o === "asc" ? "desc" : "asc"));
     else {
       setSortBy(key);
@@ -301,7 +359,6 @@ function Explorer({ apiKey, ticker }) {
         </div>
       </div>
 
-      {/* Selected concepts as removable chips */}
       {selected.length > 0 && (
         <div className="row" style={{ gap: 6 }}>
           {selected.map((c) => (
@@ -333,7 +390,12 @@ function Explorer({ apiKey, ticker }) {
                       <th
                         key={c.key}
                         onClick={() => changeSort(c.key)}
-                        style={{ cursor: "pointer", userSelect: "none", textAlign: c.num ? "right" : "left" }}
+                        style={{
+                          cursor: "pointer",
+                          userSelect: "none",
+                          textAlign: c.num ? "right" : "left",
+                          ...(c.key === "concept" ? CONCEPT_CELL : {}),
+                        }}
                         title="Click to sort"
                       >
                         {c.label}
@@ -346,7 +408,9 @@ function Explorer({ apiKey, ticker }) {
               <tbody>
                 {rows.map((row, i) => (
                   <tr key={i}>
-                    <td title={row.concept}>{prettyConcept(row.concept)}</td>
+                    <td title={row.concept} style={CONCEPT_CELL}>
+                      {prettyConcept(row.concept)}
+                    </td>
                     <td>{row.period_end}</td>
                     <td style={{ textAlign: "right" }}>{row.fy ?? ""}</td>
                     <td>{row.fp}</td>
@@ -368,19 +432,27 @@ function Explorer({ apiKey, ticker }) {
                 {offset + 1}-{offset + rows.length} of {total}
               </span>
               <div className="field" style={{ marginLeft: "auto", gap: 8 }}>
-                <button disabled={page === 0} onClick={() => setPage(0)}>
+                <button className="pagebtn" disabled={page === 0} onClick={() => setPage(0)}>
                   « First
                 </button>
-                <button disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
+                <button className="pagebtn" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
                   ‹ Prev
                 </button>
                 <span className="muted">
                   Page {page + 1} / {totalPages}
                 </span>
-                <button disabled={page + 1 >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                <button
+                  className="pagebtn"
+                  disabled={page + 1 >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                >
                   Next ›
                 </button>
-                <button disabled={page + 1 >= totalPages} onClick={() => setPage(totalPages - 1)}>
+                <button
+                  className="pagebtn"
+                  disabled={page + 1 >= totalPages}
+                  onClick={() => setPage(totalPages - 1)}
+                >
                   Last »
                 </button>
               </div>
@@ -392,7 +464,7 @@ function Explorer({ apiKey, ticker }) {
   );
 }
 
-export default function FundamentalsTab({ apiKey, ticker }) {
+export default function FundamentalsTab({ apiKey, ticker }: TickerProps) {
   if (!ticker) return <div className="empty">Select a ticker.</div>;
   return (
     <>

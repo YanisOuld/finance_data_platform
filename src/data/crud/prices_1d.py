@@ -39,9 +39,7 @@ def upsert_prices_1d(session: Session, rows: list[dict]) -> int:
     return result.rowcount or 0
 
 
-# Whitelist of columns the API is allowed to sort by. Keyed by the string the
-# client sends so an arbitrary value can never reach the ORM (no injection),
-# and unknown keys fall back to ts.
+# Sortable columns (whitelist; unknown keys fall back to ts).
 SORTABLE_COLUMNS = {
     "ts": Price1D.ts,
     "open": Price1D.open,
@@ -72,9 +70,7 @@ def get_prices(
 
     col = SORTABLE_COLUMNS.get(sort_by, Price1D.ts)
     col = col.desc() if order == "desc" else col.asc()
-    # Secondary key on ts keeps pagination stable when the primary column has
-    # ties (e.g. equal volume) -- without it the DB order within a tie group is
-    # undefined and rows can shift between pages.
+    # Secondary key keeps pagination stable across ties.
     stmt = stmt.order_by(col, Price1D.ts.asc()).offset(offset).limit(limit)
     return list(session.execute(stmt).scalars().all())
 

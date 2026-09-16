@@ -1,12 +1,24 @@
 import { useState } from "react";
-import { api } from "../api.js";
+import { api, errMsg } from "../api";
+import type { Instrument } from "../types";
 
-export default function InstrumentsSection({ apiKey, instruments, reload }) {
+interface InstrumentsSectionProps {
+  apiKey: string;
+  instruments: Instrument[];
+  reload: () => Promise<void> | void;
+}
+
+interface Status {
+  ok: boolean;
+  msg: string;
+}
+
+export default function InstrumentsSection({ apiKey, instruments, reload }: InstrumentsSectionProps) {
   const [newTicker, setNewTicker] = useState("");
   const [newScheduled, setNewScheduled] = useState(true);
   const [adding, setAdding] = useState(false);
-  const [status, setStatus] = useState(null); // {ok, msg}
-  const [togglingTicker, setTogglingTicker] = useState(null);
+  const [status, setStatus] = useState<Status | null>(null);
+  const [togglingTicker, setTogglingTicker] = useState<string | null>(null);
 
   async function handleAdd() {
     const ticker = newTicker.trim().toUpperCase();
@@ -25,13 +37,13 @@ export default function InstrumentsSection({ apiKey, instruments, reload }) {
       setNewTicker("");
       await reload();
     } catch (e) {
-      setStatus({ ok: false, msg: `Failed to register ${ticker}: ${e.message}` });
+      setStatus({ ok: false, msg: `Failed to register ${ticker}: ${errMsg(e)}` });
     } finally {
       setAdding(false);
     }
   }
 
-  async function handleToggle(inst) {
+  async function handleToggle(inst: Instrument) {
     setTogglingTicker(inst.ticker);
     try {
       await api(`/instruments/${inst.ticker}/scheduled`, apiKey, {
@@ -40,7 +52,7 @@ export default function InstrumentsSection({ apiKey, instruments, reload }) {
       });
       await reload();
     } catch (e) {
-      alert(`Failed to toggle ${inst.ticker}: ${e.message}`);
+      alert(`Failed to toggle ${inst.ticker}: ${errMsg(e)}`);
     } finally {
       setTogglingTicker(null);
     }

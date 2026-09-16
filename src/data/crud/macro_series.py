@@ -41,13 +41,15 @@ def get_macro_series(
     end: date | None = None,
     limit: int = 500,
     offset: int = 0,
+    order: str = "asc",
 ) -> list[MacroSeries]:
     stmt = select(MacroSeries).where(MacroSeries.series == series.lower())
     if start is not None:
         stmt = stmt.where(MacroSeries.ts >= start)
     if end is not None:
         stmt = stmt.where(MacroSeries.ts <= end)
-    stmt = stmt.order_by(MacroSeries.ts.asc()).offset(offset).limit(limit)
+    ts_col = MacroSeries.ts.desc() if order == "desc" else MacroSeries.ts.asc()
+    stmt = stmt.order_by(ts_col).offset(offset).limit(limit)
     return list(session.execute(stmt).scalars().all())
 
 

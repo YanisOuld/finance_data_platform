@@ -11,6 +11,13 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 * { box-sizing: border-box; }
+/* Thin red scrollbars instead of the default chunky ones -- most visible on the
+   horizontally-scrolling tables (Firefox + WebKit/Chromium). */
+* { scrollbar-width: thin; scrollbar-color: var(--bad) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bad); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: #ff7a7a; }
 body {
   margin: 0;
   background: var(--bg);
@@ -26,6 +33,7 @@ header {
   flex-wrap: wrap;
 }
 header h1 { font-size: 16px; margin: 0; flex: 1; }
+header nav { margin-top: 8px; }
 header .field { display: flex; align-items: center; gap: 6px; }
 header label { color: var(--muted); font-size: 12px; }
 input[type="text"], input[type="password"], input[type="date"], select {
@@ -36,7 +44,7 @@ input[type="text"], input[type="password"], input[type="date"], select {
   padding: 6px 8px;
   font-size: 13px;
 }
-main { padding: 24px; max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+main { padding: 40px 24px; max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
 section {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -73,3 +81,16 @@ code { font-family: var(--mono); background: #0b0d12; padding: 1px 5px; border-r
 .tabs { display: flex; gap: 6px; margin-bottom: 12px; }
 .tabs button { background: transparent; border-color: var(--border); }
 .tabs button.active { background: var(--accent-dim); border-color: var(--accent); }
+
+/* Lightweight text buttons (pagination): no box, just text with a thin
+   underline on hover/current -- far less heavy than the default boxed button. */
+.pagebtn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--text);
+  padding: 3px 4px;
+}
+.pagebtn:hover:not(:disabled) { background: transparent; border-bottom-color: var(--text); }
+.pagebtn:disabled { opacity: 0.3; cursor: default; }
