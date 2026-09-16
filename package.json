@@ -1,0 +1,23 @@
+{
+  "name": "finance-data-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Root task runner -- convenience scripts for the local docker-compose stack and the frontend.",
+  "scripts": {
+    "local": "docker compose -f docker-compose.local.yml up -d --build",
+    "local:build": "docker compose -f docker-compose.local.yml up --build",
+    "local:detached": "docker compose -f docker-compose.local.yml up -d",
+    "local:down": "docker compose -f docker-compose.local.yml down",
+    "local:reset": "docker compose -f docker-compose.local.yml down -v",
+    "local:logs": "docker compose -f docker-compose.local.yml logs -f",
+    "local:ps": "docker compose -f docker-compose.local.yml ps",
+    "up": "docker compose up -d",
+    "down": "docker compose down",
+    "frontend": "npm --prefix frontend run dev",
+    "frontend:install": "npm --prefix frontend install",
+    "frontend:build": "npm --prefix frontend run build",
+    "lint": "uv run ruff check .",
+    "format": "uv run ruff format .",
+    "test": "uv run pytest tests/unit -v"
+  }
+}
