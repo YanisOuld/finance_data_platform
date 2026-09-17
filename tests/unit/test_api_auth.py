@@ -9,7 +9,7 @@ def test_local_env_without_api_key_allows_request(monkeypatch):
     monkeypatch.setattr(deps.settings, "environment", "local")
     monkeypatch.setattr(deps.settings, "api_key", None)
 
-    require_api_key(db=None, x_api_key=None)  # should not raise
+    require_api_key(db=None, x_api_key=None)  # type: ignore[arg-type]
 
 
 def test_non_local_env_without_api_key_fails_closed(monkeypatch):
@@ -17,7 +17,7 @@ def test_non_local_env_without_api_key_fails_closed(monkeypatch):
     monkeypatch.setattr(deps.settings, "api_key", None)
 
     with pytest.raises(HTTPException) as exc_info:
-        require_api_key(db=None, x_api_key=None)
+        require_api_key(db=None, x_api_key=None)  # type: ignore[arg-type]
 
     assert exc_info.value.status_code == 500
 
@@ -29,11 +29,11 @@ def test_api_key_set_rejects_missing_or_wrong_header(monkeypatch):
     monkeypatch.setattr(deps, "get_active_by_hash", lambda db, key_hash: None)
 
     with pytest.raises(HTTPException) as exc_info:
-        require_api_key(db=None, x_api_key=None)
+        require_api_key(db=None, x_api_key=None)  # type: ignore[arg-type]
     assert exc_info.value.status_code == 401
 
     with pytest.raises(HTTPException) as exc_info:
-        require_api_key(db=None, x_api_key="wrong")
+        require_api_key(db=None, x_api_key="wrong")  # type: ignore[arg-type]
     assert exc_info.value.status_code == 401
 
 
@@ -41,7 +41,7 @@ def test_api_key_set_accepts_matching_admin_header(monkeypatch):
     monkeypatch.setattr(deps.settings, "environment", "prod")
     monkeypatch.setattr(deps.settings, "api_key", "secret123")
 
-    require_api_key(db=None, x_api_key="secret123")  # should not raise
+    require_api_key(db=None, x_api_key="secret123")  # type: ignore[arg-type]
 
 
 def test_accepts_active_db_managed_key(monkeypatch):
@@ -55,7 +55,7 @@ def test_accepts_active_db_managed_key(monkeypatch):
     monkeypatch.setattr(deps, "get_active_by_hash", lambda db, key_hash: _Row())
     monkeypatch.setattr(deps, "touch_last_used", lambda db, key_id: seen.update(id=key_id))
 
-    require_api_key(db=None, x_api_key="fdp_live_whatever")  # should not raise
+    require_api_key(db=None, x_api_key="fdp_live_whatever")  # type: ignore[arg-type]
     assert seen["id"] == 7  # last-used bookkeeping fired
 
 

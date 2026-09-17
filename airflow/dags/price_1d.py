@@ -1,10 +1,11 @@
+# pyright: reportMissingImports=false
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
 import pendulum
 
-from airflow import DAG
+from airflow import DAG  # type: ignore[attr-defined]
 from airflow.decorators import task
 from airflow.exceptions import AirflowSkipException
 from airflow.models.param import Param

@@ -12,6 +12,7 @@ filter the request, only kept for observability/params metadata.
 from __future__ import annotations
 
 from datetime import date
+from typing import cast
 
 from src.core.config import settings
 from src.core.database import SessionLocal
@@ -101,7 +102,7 @@ def run_fundamentals_pipeline(ticker: str, start: str | None = None, end: str | 
         logger.info("gold upsert completed, rows: %s", gold_rows)
 
         bronze_run_id = bronze_uri.rsplit("run_id=", 1)[-1].split(".")[0]
-        max_ts = df_silver["period_end"].max()
+        max_ts = cast(date, df_silver["period_end"].max())
         with SessionLocal() as session:
             upsert_watermark(
                 session,

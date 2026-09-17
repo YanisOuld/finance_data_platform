@@ -36,19 +36,22 @@ def trigger_dag_run(dag_id: str, conf: dict[str, Any]) -> bool:
     """Enqueue a run of `dag_id` with the given `conf`. Returns True iff Airflow
     accepted it. Never raises: any missing config, network error, or non-2xx
     response is logged and returns False so callers can degrade gracefully."""
-    if not is_configured():
+    api_url = settings.airflow_api_url
+    username = settings.airflow_username
+    password = settings.airflow_password
+    if not (api_url and username and password):
         logger.info(
             "Airflow REST not configured (AIRFLOW_API_URL/USERNAME/PASSWORD); skipping DAG trigger for %s",
             dag_id,
         )
         return False
 
-    url = f"{settings.airflow_api_url.rstrip('/')}/dags/{dag_id}/dagRuns"
+    url = f"{api_url.rstrip('/')}/dags/{dag_id}/dagRuns"
     try:
         resp = requests.post(
             url,
             json={"conf": conf},
-            auth=(settings.airflow_username, settings.airflow_password),
+            auth=(username, password),
             timeout=_TIMEOUT_SECONDS,
         )
     except requests.RequestException as e:

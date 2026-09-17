@@ -6,6 +6,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
+import pandas as pd
 import pendulum
 import requests
 import yfinance as yf
@@ -93,8 +94,8 @@ def fetch_prices_1d_safe(
     if not isinstance(end, str):
         raise TypeError(f"end must be YYYY-MM-DD str, got {type(end)}")
 
-    start_p = pendulum.parse(start).to_date_string()
-    end_excl = pendulum.parse(end).add(days=1).to_date_string()
+    start_p = pendulum.from_format(start, "YYYY-MM-DD").to_date_string()
+    end_excl = pendulum.from_format(end, "YYYY-MM-DD").add(days=1).to_date_string()
 
     last_err: Exception | None = None
 
@@ -124,11 +125,11 @@ def fetch_prices_1d_safe(
             rows: list[dict[str, Any]] = []
 
             # MultiIndex columns for multiple tickers: (TICKER, Field)
-            is_multi = hasattr(df.columns, "levels") and len(getattr(df.columns, "levels", [])) == 2
+            columns = df.columns
 
-            if is_multi:
+            if isinstance(columns, pd.MultiIndex) and columns.nlevels == 2:
                 for sym in syms:
-                    if sym not in df.columns.levels[0]:
+                    if sym not in columns.levels[0]:
                         continue
                     sub = df[sym].dropna(how="all")
                     if sub.empty:

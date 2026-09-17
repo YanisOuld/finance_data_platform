@@ -1,10 +1,11 @@
+# pyright: reportMissingImports=false
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
 import pendulum
 
-from airflow import DAG
+from airflow import DAG  # type: ignore[attr-defined]
 from airflow.decorators import task
 from airflow.models.param import Param
 
@@ -69,4 +70,4 @@ with DAG(
         return run_macro_pipeline(series)
 
     series_list = get_series_list(override="{{ params.series_override }}")
-    run_series.expand(series=series_list)
+    run_series.expand(series=series_list)  # type: ignore[attr-defined]

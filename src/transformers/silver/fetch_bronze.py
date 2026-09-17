@@ -11,7 +11,7 @@ def _get_s3():
     return get_s3_client()
 
 
-def create_bronze_key(type: str, run_id: str, dt: str = None, symbol: str = None):
+def create_bronze_key(type: str, run_id: str, dt: str | None = None, symbol: str | None = None):
     """ """
     base = f"bronze/yahoo/{type}"
 

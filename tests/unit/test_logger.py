@@ -20,7 +20,10 @@ def test_root_src_logger_has_exactly_one_handler():
 def test_formatter_includes_level_timestamp_and_module():
     get_logger("src.something")
     root = logging.getLogger("src")
-    fmt = root.handlers[0].formatter._fmt
+    formatter = root.handlers[0].formatter
+    assert formatter is not None
+    fmt = formatter._fmt
+    assert fmt is not None
     assert "%(asctime)s" in fmt
     assert "%(levelname)" in fmt
     assert "%(name)s" in fmt

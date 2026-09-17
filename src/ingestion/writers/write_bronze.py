@@ -27,21 +27,14 @@ def _utc_now():
     return datetime.now(UTC)
 
 
-def _iso(dt: datetime):
-    if dt is None:
-        return None
-
-    return dt.isoformat()
-
-
-def _dt_partition(dt: datetime):
+def _dt_partition(dt: datetime | None):
     if dt is None:
         return None
 
     return dt.strftime("%Y-%m-%d")
 
 
-def _run_partition(dt: datetime):
+def _run_partition(dt: datetime | None):
     if dt is None:
         return None
 
@@ -103,14 +96,14 @@ def write_bronze_to_s3(
     dataset: str,
     payload: Any,
     partitions: dict[str, Any] | None = None,
-    dt: datetime = None,
+    dt: datetime | None = None,
     params: dict[str, Any] | None = None,
     schema_version: int = 1,
     s3_client=None,
 ) -> BronzeWriteResult:
     """ """
     now = _utc_now()
-    fetched_at = _iso(now)
+    fetched_at = now.isoformat()
 
     if isinstance(payload, list):
         record_count = len(payload)

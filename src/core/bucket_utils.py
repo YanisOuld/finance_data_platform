@@ -8,6 +8,7 @@ credentials from Settings explicitly.
 from __future__ import annotations
 
 import boto3
+from botocore.config import Config
 
 from src.core.config import settings
 
@@ -21,5 +22,5 @@ def get_s3_client():
     # MinIO (and most S3-compatible stores) need path-style addressing.
     if settings.s3_endpoint_url:
         kwargs["endpoint_url"] = settings.s3_endpoint_url
-        kwargs["config"] = boto3.session.Config(s3={"addressing_style": "path"})
+        kwargs["config"] = Config(s3={"addressing_style": "path"})
     return boto3.client("s3", **kwargs)

@@ -1,10 +1,11 @@
+# pyright: reportMissingImports=false
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
 import pendulum
 
-from airflow import DAG
+from airflow import DAG  # type: ignore[attr-defined]
 from airflow.decorators import task
 from airflow.models.param import Param
 
@@ -72,4 +73,4 @@ with DAG(
         return run_fundamentals_pipeline(ticker)
 
     tickers = get_tickers(override="{{ params.tickers_override }}")
-    run_ticker.expand(ticker=tickers)
+    run_ticker.expand(ticker=tickers)  # type: ignore[attr-defined]
