@@ -16,6 +16,7 @@ export default function ApiKeysSection({ apiKey }: ApiKeysSectionProps) {
   const [keys, setKeys] = useState<ApiKeyInfo[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [label, setLabel] = useState("");
+  const [scopes, setScopes] = useState("read");
   const [creating, setCreating] = useState(false);
   const [freshKey, setFreshKey] = useState<FreshKey | null>(null); // shown once
   const [copied, setCopied] = useState(false);
@@ -43,7 +44,7 @@ export default function ApiKeysSection({ apiKey }: ApiKeysSectionProps) {
     try {
       const created = await api<ApiKeyCreated>("/admin/api-keys", apiKey, {
         method: "POST",
-        body: JSON.stringify({ label: label.trim() }),
+        body: JSON.stringify({ label: label.trim(), scopes }),
       });
       setFreshKey({ label: created.label, key: created.key });
       setCopied(false);
@@ -93,6 +94,10 @@ export default function ApiKeysSection({ apiKey }: ApiKeysSectionProps) {
           value={label}
           onChange={(e) => setLabel(e.target.value)}
         />
+        <select value={scopes} onChange={(e) => setScopes(e.target.value)} title="What the key is allowed to do">
+          <option value="read">read (data only)</option>
+          <option value="read,write">read + write (can trigger ingestion)</option>
+        </select>
         <button type="submit" disabled={creating || !label.trim()}>
           {creating ? "Creating..." : "Create key"}
         </button>
@@ -126,6 +131,7 @@ export default function ApiKeysSection({ apiKey }: ApiKeysSectionProps) {
               <tr>
                 <th>Label</th>
                 <th>Prefix</th>
+                <th>Scopes</th>
                 <th>Status</th>
                 <th>Created</th>
                 <th>Last used</th>
@@ -139,6 +145,7 @@ export default function ApiKeysSection({ apiKey }: ApiKeysSectionProps) {
                   <td>
                     <code>{k.prefix}…</code>
                   </td>
+                  <td className="muted">{k.scopes}</td>
                   <td>
                     <span className={`pill ${k.is_active ? "on" : "off"}`}>
                       {k.is_active ? "active" : "revoked"}

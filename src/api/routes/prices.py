@@ -6,14 +6,14 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
-from src.api.deps import require_api_key
+from src.api.deps import require_read
 from src.api.schemas import PriceResponse
 from src.core.cache import cache_get_json, cache_set_json
 from src.core.database import get_db
 from src.data.crud.prices_1d import count_prices, get_prices
 from src.data.crud.universal_instruments import get_instrument
 
-router = APIRouter(prefix="/prices", tags=["prices"], dependencies=[Depends(require_api_key)])
+router = APIRouter(prefix="/prices", tags=["prices"], dependencies=[Depends(require_read)])
 
 DbSession = Annotated[Session, Depends(get_db)]
 

@@ -4,9 +4,9 @@
 src/
   api/                      FastAPI layer, serves the Gold tables
     schemas.py                 Pydantic request/response models
-    deps.py                     require_api_key() -- X-API-Key auth
+    deps.py                     authenticate() + require_read/require_write scopes
     routes/                    instruments.py, prices.py, fundamentals.py,
-                                macro.py, health.py
+                                macro.py, runs.py, api_keys.py, health.py
 
   core/                     shared utilities
     config.py                 Settings (env vars), single source of truth
@@ -15,6 +15,7 @@ src/
     constants.py                 DEFAULT_BACKFILL_START, FRED_COLUMN_SERIES
     bucket_utils.py                S3 client factory
     cache.py                       fail-open Redis cache for GET routes
+    ratelimit.py                    fail-open per-key rate limits + dedup locks
     retry.py                        call_with_backoff(): shared exponential backoff
 
   ingestion/                fetch external data, write Bronze

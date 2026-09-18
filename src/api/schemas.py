@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -29,6 +30,29 @@ class InstrumentCreate(BaseModel):
 
 class ScheduledUpdate(BaseModel):
     is_scheduled: bool
+
+
+class RefreshRequest(BaseModel):
+    """Re-trigger ingestion for an already-registered ticker. `datasets` defaults
+    to both prices and fundamentals; `backfill_start`/`backfill_end` bound the
+    price backfill (fundamentals always return full XBRL history)."""
+
+    datasets: list[Literal["prices", "fundamentals"]] | None = None
+    backfill_start: str = DEFAULT_BACKFILL_START
+    backfill_end: str | None = None
+
+
+class TriggeredJob(BaseModel):
+    dataset: Literal["prices", "fundamentals"]
+    executor: Literal["airflow", "in_process"]
+
+
+class RefreshResponse(BaseModel):
+    """What a refresh actually kicked off. A dataset already in flight (dedup
+    lock held) is omitted from `triggered`; observe progress via GET /v1/runs."""
+
+    ticker: str
+    triggered: list[TriggeredJob]
 
 
 class PriceResponse(BaseModel):
@@ -67,6 +91,8 @@ class MacroSeriesResponse(BaseModel):
 
 class ApiKeyCreate(BaseModel):
     label: str
+    # Comma-separated grants from {"read", "write"}; defaults to read-only.
+    scopes: str = "read"
 
 
 class ApiKeyInfo(BaseModel):
@@ -77,6 +103,7 @@ class ApiKeyInfo(BaseModel):
     id: int
     label: str
     prefix: str
+    scopes: str
     is_active: bool
     created_at: datetime
     last_used_at: datetime | None
@@ -86,6 +113,24 @@ class ApiKeyCreated(ApiKeyInfo):
     """Returned once, at creation time, with the plaintext token."""
 
     key: str
+
+
+class RunResponse(BaseModel):
+    """An ingestion_runs row -- one pipeline execution, for observing async
+    backfills triggered via register/refresh."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    run_id: str
+    dataset: str
+    run_date: date
+    status: str
+    items_total: int
+    items_success: int
+    items_failed: int
+    started_at: datetime
+    finished_at: datetime | None
+    notes: str | None
 
 
 class FigiResponse(BaseModel):

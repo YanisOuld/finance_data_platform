@@ -52,6 +52,7 @@ export interface ApiKeyInfo {
   id: number;
   label: string;
   prefix: string;
+  scopes: string; // comma-separated, e.g. "read" or "read,write"
   is_active: boolean;
   created_at: string | null;
   last_used_at: string | null;

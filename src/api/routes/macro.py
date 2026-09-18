@@ -6,14 +6,14 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
-from src.api.deps import require_api_key
+from src.api.deps import require_read
 from src.api.schemas import MacroSeriesResponse
 from src.core.cache import cache_get_json, cache_set_json
 from src.core.constants import FRED_COLUMN_SERIES, FRED_SERIES_CATALOG
 from src.core.database import get_db
 from src.data.crud.macro_series import count_macro_series, get_macro_series
 
-router = APIRouter(prefix="/macro", tags=["macro"], dependencies=[Depends(require_api_key)])
+router = APIRouter(prefix="/macro", tags=["macro"], dependencies=[Depends(require_read)])
 
 DbSession = Annotated[Session, Depends(get_db)]
 

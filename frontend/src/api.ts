@@ -4,6 +4,15 @@ interface JsonError {
   detail?: unknown;
 }
 
+const API_V1_PREFIX = "/v1";
+
+function withBase(path: string): string {
+  if (path.startsWith("/admin") || path.startsWith("/health") || path.startsWith(API_V1_PREFIX)) {
+    return path;
+  }
+  return `${API_V1_PREFIX}${path}`;
+}
+
 function buildHeaders(apiKey: string | undefined, extra?: HeadersInit): Record<string, string> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -33,7 +42,7 @@ export async function api<T = unknown>(
   apiKey?: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const res = await fetch(path, { ...options, headers: buildHeaders(apiKey, options.headers) });
+  const res = await fetch(withBase(path), { ...options, headers: buildHeaders(apiKey, options.headers) });
   const body = await parseJson(res);
   raiseForStatus(res, body);
   return body as T;
@@ -44,7 +53,7 @@ export async function apiWithTotal<T = unknown>(
   apiKey?: string,
   options: RequestInit = {},
 ): Promise<{ data: T; total: number }> {
-  const res = await fetch(path, { ...options, headers: buildHeaders(apiKey, options.headers) });
+  const res = await fetch(withBase(path), { ...options, headers: buildHeaders(apiKey, options.headers) });
   const body = await parseJson(res);
   raiseForStatus(res, body);
   const total = Number(res.headers.get("X-Total-Count"));

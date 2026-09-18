@@ -65,7 +65,7 @@ def test_list_instruments(monkeypatch, client):
         instruments_router, "count_instruments", lambda db, is_active=None, is_scheduled=None: 1
     )
 
-    resp = client.get("/instruments")
+    resp = client.get("/v1/instruments")
 
     assert resp.status_code == 200
     assert resp.headers["X-Total-Count"] == "1"
@@ -86,7 +86,7 @@ def test_list_instruments(monkeypatch, client):
 def test_get_instrument_404(monkeypatch, client):
     monkeypatch.setattr(instruments_router, "get_instrument", lambda db, ticker: None)
 
-    resp = client.get("/instruments/NOTREAL")
+    resp = client.get("/v1/instruments/NOTREAL")
 
     assert resp.status_code == 404
 
@@ -94,7 +94,7 @@ def test_get_instrument_404(monkeypatch, client):
 def test_get_instrument_found(monkeypatch, client):
     monkeypatch.setattr(instruments_router, "get_instrument", lambda db, ticker: _instrument())
 
-    resp = client.get("/instruments/SOFI")
+    resp = client.get("/v1/instruments/SOFI")
 
     assert resp.status_code == 200
     assert resp.json()["ticker"] == "SOFI"
@@ -128,14 +128,14 @@ def test_create_instrument_returns_202_and_schedules_backfill(monkeypatch, clien
         lambda ticker: fundamentals_called.update(ticker=ticker),
     )
 
-    resp = client.post("/instruments", json={"ticker": "sofi"})
+    resp = client.post("/v1/instruments", json={"ticker": "sofi"})
 
     assert resp.status_code == 202
     assert resp.json()["ticker"] == "sofi"
     # the background tasks themselves only run after the response is sent in a
     # real server; TestClient runs them inline, so we can assert they fired.
     # Airflow is unconfigured in tests, so both backfills take the in-process path.
-    assert called_with["ticker"] == "sofi"
+    assert called_with["ticker"] == "SOFI"
     assert fundamentals_called["ticker"] == "SOFI"
 
 
@@ -167,7 +167,7 @@ def test_create_instrument_triggers_airflow_dag_and_skips_in_process(monkeypatch
         instruments_router, "run_fundamentals_pipeline", lambda *a, **k: called.update(fundamentals=True)
     )
 
-    resp = client.post("/instruments", json={"ticker": "sofi", "backfill_start": "2020-01-01"})
+    resp = client.post("/v1/instruments", json={"ticker": "sofi", "backfill_start": "2020-01-01"})
 
     assert resp.status_code == 202
     by_dag = {dag_id: conf for dag_id, conf in triggers}
@@ -184,7 +184,7 @@ def test_create_instrument_rejects_invalid_ticker(monkeypatch, client):
 
     monkeypatch.setattr(instruments_router, "validate_and_upsert_ticker", _raise)
 
-    resp = client.post("/instruments", json={"ticker": "NOTATICKER"})
+    resp = client.post("/v1/instruments", json={"ticker": "NOTATICKER"})
 
     assert resp.status_code == 422
 
@@ -192,7 +192,7 @@ def test_create_instrument_rejects_invalid_ticker(monkeypatch, client):
 def test_update_scheduled_404(monkeypatch, client):
     monkeypatch.setattr(instruments_router, "set_scheduled", lambda db, ticker, is_scheduled: None)
 
-    resp = client.patch("/instruments/NOTREAL/scheduled", json={"is_scheduled": False})
+    resp = client.patch("/v1/instruments/NOTREAL/scheduled", json={"is_scheduled": False})
 
     assert resp.status_code == 404
 
@@ -204,7 +204,7 @@ def test_update_scheduled_ok(monkeypatch, client):
         lambda db, ticker, is_scheduled: _instrument(is_scheduled=is_scheduled),
     )
 
-    resp = client.patch("/instruments/SOFI/scheduled", json={"is_scheduled": False})
+    resp = client.patch("/v1/instruments/SOFI/scheduled", json={"is_scheduled": False})
 
     assert resp.status_code == 200
     assert resp.json()["is_scheduled"] is False
@@ -213,7 +213,7 @@ def test_update_scheduled_ok(monkeypatch, client):
 def test_get_prices_404_for_unregistered_ticker(monkeypatch, client):
     monkeypatch.setattr(prices_router, "get_instrument", lambda db, ticker: None)
 
-    resp = client.get("/prices/NOTREAL")
+    resp = client.get("/v1/prices/NOTREAL")
 
     assert resp.status_code == 404
 
@@ -237,7 +237,7 @@ def test_get_prices_returns_rows(monkeypatch, client):
     )
     monkeypatch.setattr(prices_router, "count_prices", lambda db, ticker, start=None, end=None: 1)
 
-    resp = client.get("/prices/SOFI")
+    resp = client.get("/v1/prices/SOFI")
 
     assert resp.status_code == 200
     assert resp.headers["X-Total-Count"] == "1"
@@ -258,7 +258,7 @@ def test_get_prices_returns_rows(monkeypatch, client):
 def test_get_fundamentals_404_for_unregistered_ticker(monkeypatch, client):
     monkeypatch.setattr(fundamentals_router, "get_instrument", lambda db, ticker: None)
 
-    resp = client.get("/fundamentals/NOTREAL")
+    resp = client.get("/v1/fundamentals/NOTREAL")
 
     assert resp.status_code == 404
 
@@ -294,7 +294,7 @@ def test_get_fundamentals_returns_rows(monkeypatch, client):
         lambda db, ticker, concept=None, concepts=None, form=None: 1,
     )
 
-    resp = client.get("/fundamentals/SOFI")
+    resp = client.get("/v1/fundamentals/SOFI")
 
     assert resp.status_code == 200
     assert resp.headers["X-Total-Count"] == "1"
@@ -332,8 +332,8 @@ def test_instruments_route_enforces_api_key_when_configured(monkeypatch, client)
         instruments_router, "count_instruments", lambda db, is_active=None, is_scheduled=None: 0
     )
 
-    resp_no_key = client.get("/instruments")
-    resp_with_key = client.get("/instruments", headers={"X-API-Key": "secret123"})
+    resp_no_key = client.get("/v1/instruments")
+    resp_with_key = client.get("/v1/instruments", headers={"X-API-Key": "secret123"})
 
     assert resp_no_key.status_code == 401
     assert resp_with_key.status_code == 200
@@ -356,20 +356,20 @@ def test_health_returns_503_when_db_is_unreachable(client):
 
 
 def test_missing_api_key_is_checked_before_body_validation(monkeypatch, client):
-    """Router-level dependencies (require_api_key) run before the route
+    """Auth dependencies (require_write -> authenticate) run before the route
     handler, so a missing key on a mutating route must short-circuit to 401
     -- not fall through to a 422 on the (also-invalid) request body.
     """
     monkeypatch.setattr(deps.settings, "environment", "prod")
     monkeypatch.setattr(deps.settings, "api_key", "secret123")
 
-    resp = client.post("/instruments", json={})  # missing required "ticker" field too
+    resp = client.post("/v1/instruments", json={})  # missing required "ticker" field too
 
     assert resp.status_code == 401
 
 
 def test_get_macro_series_rejects_unknown_series(client):
-    resp = client.get("/macro/not-a-real-series")
+    resp = client.get("/v1/macro/not-a-real-series")
 
     assert resp.status_code == 404
 
@@ -388,7 +388,7 @@ def test_get_macro_series_accepts_slash_containing_series(monkeypatch, client):
     )
     monkeypatch.setattr(macro_router, "count_macro_series", lambda db, series, start=None, end=None: 1)
 
-    resp = client.get("/macro/usd/cad")
+    resp = client.get("/v1/macro/usd/cad")
 
     assert resp.status_code == 200
     assert resp.json()[0]["series"] == "usd/cad"
@@ -403,7 +403,7 @@ def test_get_macro_series_returns_rows(monkeypatch, client):
     )
     monkeypatch.setattr(macro_router, "count_macro_series", lambda db, series, start=None, end=None: 1)
 
-    resp = client.get("/macro/cpi")
+    resp = client.get("/v1/macro/cpi")
 
     assert resp.status_code == 200
     assert resp.headers["X-Total-Count"] == "1"
@@ -413,7 +413,7 @@ def test_get_macro_series_returns_rows(monkeypatch, client):
 def test_get_instrument_figi_404_for_unregistered_ticker(monkeypatch, client):
     monkeypatch.setattr(instruments_router, "get_instrument", lambda db, ticker: None)
 
-    resp = client.get("/instruments/NOTREAL/figi")
+    resp = client.get("/v1/instruments/NOTREAL/figi")
 
     assert resp.status_code == 404
 
@@ -444,7 +444,7 @@ def test_get_instrument_figi_returns_all_candidates(monkeypatch, client):
     ]
     monkeypatch.setattr(instruments_router, "get_figi_mappings", lambda db, ticker: rows)
 
-    resp = client.get("/instruments/SOFI/figi")
+    resp = client.get("/v1/instruments/SOFI/figi")
 
     assert resp.status_code == 200
     assert [r["figi"] for r in resp.json()] == ["FIGI1", "FIGI2"]
@@ -461,7 +461,7 @@ def test_unhandled_exception_returns_generic_500(monkeypatch):
     # ServerErrorMiddleware does this deliberately, so bugs aren't hidden
     # during testing) -- disable it here to assert on the response instead.
     no_raise_client = TestClient(app, raise_server_exceptions=False)
-    resp = no_raise_client.get("/instruments/SOFI")
+    resp = no_raise_client.get("/v1/instruments/SOFI")
 
     assert resp.status_code == 500
     assert resp.json() == {"detail": "Internal server error"}

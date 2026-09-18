@@ -76,10 +76,23 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO", validation_alias=AliasChoices("LOG_LEVEL"))
 
-    # Shared secret checked by src/api/deps.py::require_api_key against the
-    # X-API-Key header. Enforced everywhere except environment="local" -- see
-    # require_api_key's docstring for the fail-open/fail-closed rationale.
+    # Env master key checked by src/api/deps.py::authenticate against the
+    # X-API-Key header. It authenticates as admin (full scopes, no rate limit)
+    # and also gates /admin key management. Enforced everywhere except
+    # environment="local" -- see authenticate's docstring for the
+    # fail-open/fail-closed rationale.
     api_key: str | None = Field(default=None, validation_alias=AliasChoices("API_KEY"))
+
+    # Per-key request rate limits (fixed window, 1 minute), enforced in
+    # src/api/deps.py via Redis (src/core/ratelimit.py). The env master key and
+    # local mode are exempt. `rate_limit_per_minute` caps every authenticated
+    # request; `rate_limit_write_per_minute` is the stricter cap on ingestion
+    # triggers (register/refresh) that protect upstream providers from trigger
+    # storms. Set either to 0 to disable that limit. No-op when Redis is unset.
+    rate_limit_per_minute: int = Field(default=120, validation_alias=AliasChoices("RATE_LIMIT_PER_MINUTE"))
+    rate_limit_write_per_minute: int = Field(
+        default=10, validation_alias=AliasChoices("RATE_LIMIT_WRITE_PER_MINUTE")
+    )
 
     # Comma-separated allowed origins for CORS, e.g. "https://app.example.com,
     # http://localhost:5173". "*" (default) allows any origin -- fine while no

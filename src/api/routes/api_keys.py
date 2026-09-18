@@ -23,12 +23,17 @@ def list_api_keys_route(db: DbSession):
 
 @router.post("", response_model=ApiKeyCreated, status_code=201)
 def create_api_key_route(body: ApiKeyCreate, db: DbSession):
-    """Create a key; the response carries the plaintext token once."""
-    row, token = create_api_key(db, body.label)
+    """Create a key; the response carries the plaintext token once. `scopes` is a
+    comma-separated subset of {read, write}; defaults to read-only."""
+    try:
+        row, token = create_api_key(db, body.label, scopes=body.scopes)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     return ApiKeyCreated(
         id=row.id,
         label=row.label,
         prefix=row.prefix,
+        scopes=row.scopes,
         is_active=row.is_active,
         created_at=row.created_at,
         last_used_at=row.last_used_at,

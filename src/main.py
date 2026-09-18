@@ -5,13 +5,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from src.api.routes import api_keys, fundamentals, health, instruments, macro, prices
+from src.api.routes import api_keys, fundamentals, health, instruments, macro, prices, runs
 from src.core.config import settings
 from src.core.logger import get_logger
 
 logger = get_logger(__name__)
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+API_V1_PREFIX = "/v1"
 
 app = FastAPI(title="Finance Data Platform API")
 
@@ -37,10 +39,11 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 
 app.include_router(health.router)
 app.include_router(api_keys.router)
-app.include_router(instruments.router)
-app.include_router(prices.router)
-app.include_router(fundamentals.router)
-app.include_router(macro.router)
+app.include_router(instruments.router, prefix=API_V1_PREFIX)
+app.include_router(prices.router, prefix=API_V1_PREFIX)
+app.include_router(fundamentals.router, prefix=API_V1_PREFIX)
+app.include_router(macro.router, prefix=API_V1_PREFIX)
+app.include_router(runs.router, prefix=API_V1_PREFIX)
 
 if FRONTEND_DIR.is_dir():
     app.mount("/app", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")

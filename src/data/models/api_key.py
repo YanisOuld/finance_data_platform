@@ -21,6 +21,11 @@ class ApiKey(Base):
     prefix: Mapped[str] = mapped_column(String, nullable=False)
     key_hash: Mapped[str] = mapped_column(String, nullable=False, unique=True, index=True)
 
+    # Comma-separated grants from {"read", "write"}. Read serves Gold data;
+    # write authorizes ingestion triggers (register / refresh). New keys default
+    # to read-only -- see src/data/crud/api_key.py.
+    scopes: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'read'"))
+
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
 
     created_at: Mapped[datetime] = mapped_column(

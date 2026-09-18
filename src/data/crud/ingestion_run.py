@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, date, datetime
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from src.data.models.ingestion_run import IngestionRun
@@ -40,3 +41,33 @@ def finish_run(
     run.notes = notes
     run.finished_at = datetime.now(UTC)
     session.commit()
+
+
+def get_run(session: Session, run_id: str) -> IngestionRun | None:
+    return session.get(IngestionRun, run_id)
+
+
+def list_runs(
+    session: Session,
+    *,
+    dataset: str | None = None,
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[IngestionRun]:
+    stmt = select(IngestionRun)
+    if dataset is not None:
+        stmt = stmt.where(IngestionRun.dataset == dataset)
+    if status is not None:
+        stmt = stmt.where(IngestionRun.status == status)
+    stmt = stmt.order_by(IngestionRun.started_at.desc()).limit(limit).offset(offset)
+    return list(session.execute(stmt).scalars().all())
+
+
+def count_runs(session: Session, *, dataset: str | None = None, status: str | None = None) -> int:
+    stmt = select(func.count()).select_from(IngestionRun)
+    if dataset is not None:
+        stmt = stmt.where(IngestionRun.dataset == dataset)
+    if status is not None:
+        stmt = stmt.where(IngestionRun.status == status)
+    return int(session.execute(stmt).scalar_one())

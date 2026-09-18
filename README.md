@@ -28,23 +28,46 @@ wrapped in an `ingestion_runs` row for observability. See
 
 ## API
 
-`src/main.py` — FastAPI, served via `uvicorn` (see `Dockerfile`).
+`src/main.py` — FastAPI, served via `uvicorn` (see `Dockerfile`). The data API
+is versioned under `/v1`; `/health` and `/admin` stay unversioned.
 
-| Route | What |
-| --- | --- |
-| `GET /health` | DB connectivity check, no auth (for Docker/LB healthchecks) |
-| `GET /instruments`, `GET /instruments/{ticker}` | registered tickers |
-| `POST /instruments` | register a ticker + kick off an initial backfill |
-| `PATCH /instruments/{ticker}/scheduled` | toggle the daily auto-ETL on/off |
-| `GET /instruments/{ticker}/figi` | OpenFIGI candidates for a ticker |
-| `GET /prices/{ticker}` | daily OHLCV, filterable by `start`/`end` |
-| `GET /fundamentals/{ticker}` | XBRL facts, filterable by `concept` |
-| `GET /macro/{series}` | FRED series, filterable by `start`/`end` |
+| Route | Scope | What |
+| --- | --- | --- |
+| `GET /health` | none | DB connectivity check, no auth (for Docker/LB healthchecks) |
+| `GET /v1/instruments`, `GET /v1/instruments/{ticker}` | read | registered tickers |
+| `POST /v1/instruments` | write | register a ticker + kick off an initial backfill |
+| `POST /v1/instruments/{ticker}/refresh` | write | force a re-fetch of an existing ticker (prices and/or fundamentals) |
+| `PATCH /v1/instruments/{ticker}/scheduled` | write | toggle the daily auto-ETL on/off |
+| `GET /v1/instruments/{ticker}/figi` | read | OpenFIGI candidates for a ticker |
+| `GET /v1/prices/{ticker}` | read | daily OHLCV, filterable by `start`/`end` |
+| `GET /v1/fundamentals/{ticker}` | read | XBRL facts, filterable by `concept` |
+| `GET /v1/macro/{series}` | read | FRED series, filterable by `start`/`end` |
+| `GET /v1/runs`, `GET /v1/runs/{run_id}` | read | ingestion run status (observe async backfills) |
+| `GET/POST/DELETE /admin/api-keys` | admin | key management (env master key only) |
 
-All routes except `/health` require an `X-API-Key` header matching `API_KEY`
-(see `src/api/deps.py`) whenever `ENV != local`. List endpoints support
-`limit`/`offset` and return the total row count in an `X-Total-Count` header,
-and are cached in Redis for a short TTL (fails open if Redis is unreachable).
+**Auth & scopes.** All routes except `/health` require an `X-API-Key` header
+whenever `ENV != local` (see `src/api/deps.py`). The env master `API_KEY`
+authenticates as admin (full access, no rate limit) and is the only key that
+manages `/admin/api-keys`. Hand consuming apps their own DB-managed keys
+(`POST /admin/api-keys`), each scoped `read` (serve Gold data) and/or `write`
+(trigger ingestion via register/refresh) — new keys default to read-only.
+
+**Rate limits.** DB keys are rate-limited per key (fixed 1-minute window, via
+Redis): a general cap on every request (`RATE_LIMIT_PER_MINUTE`, default 120)
+and a stricter cap on ingestion triggers (`RATE_LIMIT_WRITE_PER_MINUTE`,
+default 10) that shields the upstream providers (Yahoo/SEC) from trigger
+storms. Over the limit returns `429` with a `Retry-After` header. Admin/local
+are exempt; limiting is a no-op when Redis is unset (fails open).
+
+**Idempotence.** `POST /v1/instruments` and `.../refresh` take a short-lived
+per-ticker dedup lock, so a duplicate/concurrent trigger won't fan out a second
+backfill. A refresh whose datasets are all already in flight returns `409`;
+otherwise it returns `202` with the jobs it kicked off — poll `GET /v1/runs`
+for completion/status.
+
+List endpoints support `limit`/`offset` and return the total row count in an
+`X-Total-Count` header, and are cached in Redis for a short TTL (fails open if
+Redis is unreachable).
 
 ## Internal UI
 

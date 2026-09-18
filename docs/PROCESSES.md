@@ -61,7 +61,9 @@ idempotent, a backfill and the daily job can overlap without creating duplicates
 The `is_scheduled` flag controls enrolment in the daily DAG: register with
 `is_scheduled=False` to load a ticker without adding it to the automatic ETL,
 then `set_scheduled()` flips it on later. Also exposed over the API as
-`POST /instruments` + `PATCH /instruments/{ticker}/scheduled`.
+`POST /v1/instruments` + `PATCH /v1/instruments/{ticker}/scheduled` (a `write`
+scope), with `POST /v1/instruments/{ticker}/refresh` to force a re-fetch of an
+already-registered ticker.
 
 ## FIGI mapping (`run_map_figi.py`)
 

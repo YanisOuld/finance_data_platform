@@ -11,10 +11,7 @@ export default defineConfig({
     // different port than uvicorn; proxy API calls through so the app can
     // be developed without rebuilding on every change.
     proxy: {
-      "/instruments": "http://127.0.0.1:8000",
-      "/prices": "http://127.0.0.1:8000",
-      "/fundamentals": "http://127.0.0.1:8000",
-      "/macro": "http://127.0.0.1:8000",
+      "/v1": "http://127.0.0.1:8000",
       "/health": "http://127.0.0.1:8000",
       "/admin": "http://127.0.0.1:8000",
     },
